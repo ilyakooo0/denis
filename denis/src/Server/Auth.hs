@@ -44,7 +44,7 @@ import qualified GHC.Generics as GHC
 import Data.Aeson
 import Data.Binary.Builder (toLazyByteString)
 
-type AuthenticationHandler = ReqBody '[JSON] AuthenticationCredits :> Post '[JSON] (Headers '[Header "Set-Cookie" String] Int)
+type AuthenticationHandler = ReqBody '[JSON] AuthenticationCredits :> PostNoContent '[JSON, PlainText, FormUrlEncoded] (Headers '[Header "Set-Cookie" String] NoContent)
 
 data AuthenticationCredits = AuthenticationCredits {authenticationId :: UserId}
     deriving GHC.Generic
@@ -64,7 +64,7 @@ authenticate (AuthenticationCredits uId) = do
         -- setCookieDomain = Just "127.0.0.1", 
         setCookiePath = Just "/" }
     -- let token = cookieTokenKeyString <> "=" <> show tId <> "; Expires=" <> show expire <> "; Domain=127.0.0.1:2000; Path=/" -- ; Secure" --; HttpOnly"
-    return $ addHeader (L.unpack . toLazyByteString . renderSetCookie $ cookie) 0 
+    return $ addHeader (L.unpack . toLazyByteString . renderSetCookie $ cookie) NoContent 
 
 
 checkToken :: DBConnection -> ByteString -> Handler UserId
