@@ -55,7 +55,7 @@ authenticate (AuthenticationCredits uId) = do
     conn <- ask
     expire <- liftIO $ fmap (addUTCTime (1 * 24 * 60 * 60)) getCurrentTime -- one days
     tId <- fmap userId . runQ invalidToken . getUser $ uId
-    let token = cookieTokenKeyString <> "=" <> show tId <> "; Expires=" <> show expire <> "" -- ; Secure" --; HttpOnly"
+    let token = cookieTokenKeyString <> "=" <> show tId <> "; Expires=" <> show expire <> "; Domain=valera-denis.herokuapp.com" -- ; Secure" --; HttpOnly"
     return $ addHeader token NoContent 
     
 
