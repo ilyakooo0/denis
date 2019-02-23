@@ -23,6 +23,7 @@ import Server.App
 import Data.User
 import Data.ByteString
 import qualified Data.ByteString.Char8 as C
+import qualified Data.ByteString.Lazy.Char8 as L
 import Data.Query
 import Data.Binary (decode)
 import Server.Error
@@ -34,15 +35,16 @@ import Servant.Server.Experimental.Auth
 import Servant.API
 import Network.Wai (Request, requestHeaders)
 import Servant.Server
-import Web.Cookie (parseCookies)
+import Web.Cookie
 import Data.Time.Clock
 import Data.Monoid ((<>))
 import Data.Text
 import Data.Proxy
 import qualified GHC.Generics as GHC
 import Data.Aeson
+import Data.Binary.Builder (toLazyByteString)
 
-type AuthenticationHandler = ReqBody '[JSON] AuthenticationCredits :> PostNoContent '[JSON, PlainText, FormUrlEncoded] (Headers '[Header "Set-Cookie" String] NoContent)
+type AuthenticationHandler = ReqBody '[JSON] AuthenticationCredits :> Post '[JSON] (Headers '[Header "Set-Cookie" String] Int)
 
 data AuthenticationCredits = AuthenticationCredits {authenticationId :: UserId}
     deriving GHC.Generic
@@ -55,9 +57,14 @@ authenticate (AuthenticationCredits uId) = do
     conn <- ask
     expire <- liftIO $ fmap (addUTCTime (1 * 24 * 60 * 60)) getCurrentTime -- one days
     tId <- fmap userId . runQ invalidToken . getUser $ uId
-    let token = cookieTokenKeyString <> "=" <> show tId <> "; Expires=" <> show expire <> "; Domain=valera-denis.herokuapp.com" -- ; Secure" --; HttpOnly"
-    return $ addHeader token NoContent 
-    
+    let cookie = defaultSetCookie { 
+        setCookieName = cookieTokenKey, 
+        setCookieValue = C.pack $ show tId, 
+        setCookieExpires = Just expire, 
+        -- setCookieDomain = Just "127.0.0.1", 
+        setCookiePath = Just "/" }
+    -- let token = cookieTokenKeyString <> "=" <> show tId <> "; Expires=" <> show expire <> "; Domain=127.0.0.1:2000; Path=/" -- ; Secure" --; HttpOnly"
+    return $ addHeader (L.unpack . toLazyByteString . renderSetCookie $ cookie) 0 
 
 
 checkToken :: DBConnection -> ByteString -> Handler UserId
