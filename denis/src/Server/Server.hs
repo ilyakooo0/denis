@@ -50,7 +50,7 @@ runServer = do
 
 policy :: CorsResourcePolicy
 policy = CorsResourcePolicy {
-    corsOrigins=Nothing,
+    corsOrigins = Just (["http://localhost:8080", "http://localhost:4000", "http://127.0.0.1:4000", "http://127.0.0.1:8080", "http://lvh.me:4000", "http://lvh.me:8080"], True), -- Nothing,
     corsMethods=[methodGet, methodPost],
     corsRequestHeaders = ["content-type"],
     corsExposedHeaders = Nothing,
