@@ -84,3 +84,12 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - denis
+  denis-tables:
+    main:                GenerateTables.hs
+    source-dirs:         generateTables
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - denis
