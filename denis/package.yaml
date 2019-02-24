@@ -27,9 +27,8 @@ dependencies:
 - text
 - aeson
 - bytestring
-- http-client
-- http-client-tls
-- stm
+# - http-client
+# - http-client-tls
 - servant-websockets
 - websockets
 - squeal-postgresql

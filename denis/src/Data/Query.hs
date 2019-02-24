@@ -142,6 +142,7 @@ getPostsForUserLimitingQ :: Word64 -> Query Schema (TuplePG (Only UserId)) (RowP
 getPostsForUserLimitingQ lim = select (#postRowId `as` #fromOnly) $
     (from $ table #posts) &
     where_ (#postRowAuthorId .== param @1) &
+    orderBy [#postRowId & Desc] &
     limit lim
     
 getPostsForUser :: Word64 -> UserId -> StaticPQ [Post]
