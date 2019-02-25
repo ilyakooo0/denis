@@ -42,13 +42,15 @@ instance ToJSON DraftUpdate where
 type DraftApi = "create" :> ReqBody '[JSON] [P.PostElement P.Draft] :> Post '[JSON] P.DraftId :<|>
     "update" :> ReqBody '[JSON] DraftUpdate :> PostNoContent '[JSON, PlainText, FormUrlEncoded] NoContent :<|>
     "publish" :> ReqBody '[JSON] P.DraftId :> PostNoContent '[JSON, PlainText, FormUrlEncoded] NoContent :<|>
-    "all" :> Post '[JSON] [DraftUpdate]
+    "all" :> Post '[JSON] [DraftUpdate] :<|>
+    "createAndPublish" :> ReqBody '[JSON] [P.PostElement P.Draft] :> PostNoContent '[JSON, PlainText, FormUrlEncoded] NoContent
 
 draftApi :: UserId -> ServerT DraftApi App
 draftApi uId = 
     (fmap P.postId . runQnotFound . createDraft uId) :<|> updateDraftApi uId :<|> 
     publishDraftApi uId :<|>
-    runQnotFound (fmap (map postToDraft) $ getDrafts uId)
+    runQnotFound (fmap (map postToDraft) $ getDrafts uId) :<|>
+    createAndPublish uId
 
 updateDraftApi :: UserId -> DraftUpdate -> App NoContent
 updateDraftApi uId (DraftUpdate dId els) = do 
@@ -62,3 +64,8 @@ publishDraftApi uId dId = do
 
 postToDraft :: P.Draft -> DraftUpdate
 postToDraft (P.PostData dId _ body) = DraftUpdate dId body
+
+createAndPublish :: UserId -> [P.PostElement P.Draft] -> App NoContent
+createAndPublish uId els = do
+   dId <- fmap P.postId . runQnotFound . createDraft uId $ els
+   publishDraftApi uId dId
