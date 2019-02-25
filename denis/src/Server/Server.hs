@@ -17,6 +17,7 @@ import Data.Maybe
 import Control.Monad.Reader
 import Network.Wai.Handler.Warp
 import Network.HTTP.Types.Method 
+import Server.Logger
 
 import Network.Wai.Middleware.Cors
 
@@ -40,8 +41,10 @@ runServer = do
     port <- getServerPort
     cfg <- getConfig
     let ctx = genAuthServerContext $ getPool cfg
+    (middleLogger, logger) <- mkLogger 50
+    let serverAPI = mkServerAPI logger
     let s = hoistServerWithContext serverProxy contextProxy (flip runReaderT cfg) serverAPI
-    runSettings (settings port) $ cors (const $ Just policy) $ serveWithContext serverProxy ctx s
+    runSettings (settings port) $ cors (const $ Just policy) . middleLogger $ serveWithContext serverProxy ctx s
     -- TODO: remove simpleCors
 
 -- runServer :: IO ()

@@ -6,7 +6,7 @@
 module Server.API (
         API,
         serverProxy,
-        serverAPI
+        mkServerAPI
 ) where 
     
 import Data.Proxy
@@ -26,14 +26,16 @@ import Server.App
 import Control.Monad.Error
 import Server.API.Draft
 import Server.API.Posts
+import Server.Logger
 
 maybeNotFound :: App (Maybe a) -> App a
 maybeNotFound = (>>= (\t -> case t of
     Just y -> return y
     Nothing -> throwError err404))
 
-type API = "authenticate" :> AuthenticationHandler 
-        :<|>
+type API = 
+        LoggerAPI :<|>
+        "authenticate" :> AuthenticationHandler :<|>
             AuthProtect "basicAuth" :> (
             "users" :> ReqBody '[JSON] [UserId] :> Post '[JSON] [User] :<|>
             "posts" :> PostApi :<|>
@@ -43,8 +45,10 @@ type API = "authenticate" :> AuthenticationHandler
 serverProxy :: Proxy API
 serverProxy = Proxy
 
-serverAPI :: ServerT API App
-serverAPI = authenticate :<|> (\uId -> 
+mkServerAPI :: Logger -> ServerT API App
+mkServerAPI l = 
+        l :<|> 
+        authenticate :<|> (\uId -> 
         mapM (runQnotFound . getUser) :<|>
         postApi uId :<|>
         draftApi uId

@@ -43,6 +43,11 @@ dependencies:
 - http-types
 - mmorph
 - servant-docs
+- stm
+- case-insensitive
+- wai-extra
+- data-default-class
+- fast-logger
 
 - lens
 

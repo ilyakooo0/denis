@@ -21,6 +21,7 @@ import Data.Int (Int64)
 import Data.Word (Word64)
 import Server.API.Posts
 import Server.API.Draft
+import Server.Logger
 
 main = writeFile "docs.md" . markdown . docs . pretty $ serverProxy 
 
@@ -57,3 +58,6 @@ instance ToSample UserPostsRequest where
 
 instance ToSample DraftUpdate where
     toSamples _ = samples $ [DraftUpdate 8] <*> (map snd $ toSamples Proxy)
+
+instance ToSample Log where
+    toSamples _ = samples ["Log"]

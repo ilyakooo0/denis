@@ -11,7 +11,8 @@ module Server.App (
     DBConnection,
     Config(..),
     ask,
-    asks
+    asks,
+    liftIO
 ) where
 
 import Servant.Server
@@ -20,6 +21,7 @@ import Squeal.PostgreSQL.Pool
 import Data.Schema
 import Generics.SOP (K)
 import Squeal.PostgreSQL.PQ (Connection)
+import Control.Monad.IO.Class
 
 type App = ReaderT Config Handler 
 
