@@ -21,7 +21,7 @@ import Squeal.PostgreSQL.Pool
 import Data.Schema
 import Generics.SOP (K)
 import Squeal.PostgreSQL.PQ (Connection)
-import Control.Monad.IO.Class
+import Control.Monad.IO.Class ()
 
 type App = ReaderT Config Handler 
 

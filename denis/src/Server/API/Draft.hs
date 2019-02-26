@@ -17,12 +17,19 @@ import Servant.API
 import qualified Data.Post as P
 import Data.Aeson 
 import GHC.Generics
-import Data.Int (Int64)
 import Server.App
 import Servant.Server
 import Data.Query
 import Data.User
 import Data.Connection
+import Servant.Docs (ToSample, toSamples, samples)
+
+-- MARK: Documentation
+
+instance ToSample DraftUpdate where
+    toSamples _ = samples $ [DraftUpdate 8] <*> (map snd $ toSamples Proxy)
+
+-- MARK: Implementation
 
 data DraftUpdate = DraftUpdate {
     draftId :: P.DraftId,

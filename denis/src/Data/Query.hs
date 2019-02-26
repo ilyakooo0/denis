@@ -20,19 +20,13 @@ module Data.Query (
 ) where
 
 import Squeal.PostgreSQL
-import Squeal.PostgreSQL.Expression
-import Squeal.PostgreSQL.Schema
 import Data.User
 import Data.Post
 import Data.Schema
-import Data.List
-import Data.Function (on)
+-- import Data.Function (on)
 import qualified Data.Map.Lazy as M
-import Server.App
 import Data.Connection
 import Data.PostElement
-import Control.Monad.Base
-import Control.Monad ((<$!>))
 import qualified Servant as S
 import Control.Monad.Morph
 import Data.Maybe
@@ -180,7 +174,7 @@ updateDraft uId dId els = transactionally_ $ do
     if c /= 1 then
         lift $ S.throwError S.err404
         else do 
-            manipulateParams deleteElementsForIdQ (Only dId)
+            _ <- manipulateParams deleteElementsForIdQ (Only dId)
             traversePrepared_ createDraftElementRowsQ $ elementsToRows dId els
 
 getDraftElementRowsQ :: Query Schema (TuplePG (Only DraftId)) (RowPG (ElementRow Draft))
@@ -200,7 +194,7 @@ publishDraft uId dId = transactionally_ $ do
             pId' <- manipulateParams createPostRowQ (Only uId)
             pId <- lift $ fromOnly <$> getRow 0 pId'
             traversePrepared_ createPostElementRowsQ $ map (fromDraft pId) els
-            manipulateParams deleteDraftQ (Only dId)
+            _ <- manipulateParams deleteDraftQ (Only dId)
             return ()
         
 

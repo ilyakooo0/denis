@@ -10,10 +10,7 @@
 
 module Data.Post (
     Post,
-    postId,
-    postAuthorId,
-    postBody,
-    PostElement(..),
+    PostElement,
     PostQuote(..),
     PostRow,
     PostQuoteRow,
@@ -27,24 +24,24 @@ module Data.Post (
     DraftId,
     mkDraft,
     fromDraft,
-
-    -- for docs only
-    PostData(..),
-    PostType(..)
+    PostData(..)
 ) where 
 
 import Data.Int (Int64)
--- import Squeal.PostgreSQL
--- import Squeal.PostgreSQL.Render
--- import qualified Squeal.PostgreSQL.PQ as P
 import qualified Generics.SOP as SOP
 import qualified GHC.Generics as GHC
--- import Squeal.PostgreSQL.Schema
 import Data.Aeson
 import qualified Data.Map.Lazy as M
+import Servant.Docs (ToSample, toSamples, samples)
+import Data.Proxy
 
 import Data.PostElement
--- import Data.RowConvertable
+
+-- MARK: Documentation
+
+instance ToSample (PostData a) where
+    toSamples _ = samples $ [PostData 8 17] <*> (map snd $ toSamples Proxy)
+
 
 -- MARK: Actual type 
 

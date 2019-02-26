@@ -9,7 +9,6 @@ import Server.Auth
 import Server.App
 
 import Servant.Server
-import Servant.API
 import System.Environment
 import qualified Data.ByteString.Char8 as B
 import Squeal.PostgreSQL.Pool
@@ -33,7 +32,7 @@ getServerPort = maybe 2000 read <$> lookupEnv "PORT"
 getConfig :: IO Config
 getConfig = do
     databaseURL <- getDBString
-    conn <- createConnectionPool databaseURL 1 0.5 10
+    conn <- createConnectionPool databaseURL 3 0.5 10
     return $ Config conn
 
 runServer :: IO ()
@@ -41,15 +40,10 @@ runServer = do
     port <- getServerPort
     cfg <- getConfig
     let ctx = genAuthServerContext $ getPool cfg
-    (middleLogger, logger) <- mkLogger 50
+    (middleLogger, logger) <- mkLogger 100
     let serverAPI = mkServerAPI logger
     let s = hoistServerWithContext serverProxy contextProxy (flip runReaderT cfg) serverAPI
     runSettings (settings port) $ cors (const $ Just policy) . middleLogger $ serveWithContext serverProxy ctx s
-    -- TODO: remove simpleCors
-
--- runServer :: IO ()
--- runServer = do
---     s <- getServer
 
 policy :: CorsResourcePolicy
 policy = CorsResourcePolicy {

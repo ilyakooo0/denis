@@ -21,15 +21,13 @@ module Server.Auth (
 
 import Server.App
 import Data.User
-import Data.ByteString
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString.Lazy.Char8 as L
 import Data.Query
-import Data.Binary (decode)
 import Server.Error
-import Control.Monad.Error
+import Control.Monad.Except
 import Text.Read (readMaybe)
-import Squeal.PostgreSQL.PQ
 import Data.Connection
 import Servant.Server.Experimental.Auth
 import Servant.API
@@ -37,12 +35,18 @@ import Network.Wai (Request, requestHeaders)
 import Servant.Server
 import Web.Cookie
 import Data.Time.Clock
-import Data.Monoid ((<>))
-import Data.Text
 import Data.Proxy
 import qualified GHC.Generics as GHC
 import Data.Aeson
 import Data.Binary.Builder (toLazyByteString)
+import Servant.Docs (ToSample, samples, toSamples)
+
+-- MARK: Documentation
+
+instance ToSample AuthenticationCredits where
+    toSamples _ = samples $ map AuthenticationCredits [56, 103, 8]
+            
+-- MARK: Implementation
 
 type AuthenticationHandler = ReqBody '[JSON] AuthenticationCredits :> PostNoContent '[JSON, PlainText, FormUrlEncoded] (Headers '[Header "Set-Cookie" String] NoContent)
 
@@ -54,7 +58,6 @@ instance FromJSON AuthenticationCredits
 
 authenticate :: ServerT AuthenticationHandler App
 authenticate (AuthenticationCredits uId) = do
-    conn <- ask
     expire <- liftIO $ fmap (addUTCTime (1 * 24 * 60 * 60)) getCurrentTime -- one days
     tId <- fmap userId . runQ invalidToken . getUser $ uId
     let cookie = defaultSetCookie { 
@@ -67,7 +70,7 @@ authenticate (AuthenticationCredits uId) = do
     return $ addHeader (L.unpack . toLazyByteString . renderSetCookie $ cookie) NoContent 
 
 
-checkToken :: DBConnection -> ByteString -> Handler UserId
+checkToken :: DBConnection -> BS.ByteString -> Handler UserId
 checkToken conn token = do
     uId <- case ((readMaybe . C.unpack) token :: Maybe UserId) of
         Just uId -> return uId
@@ -83,10 +86,8 @@ authHandler conn = mkAuthHandler handler
             cookie <- maybeToEither "Missing cookie header" $ lookup "cookie" $ requestHeaders req
             maybeToEither "Missing token in cookie" $ lookup cookieTokenKey $ parseCookies cookie
 
-cookieTokenKey :: ByteString
+cookieTokenKey :: BS.ByteString
 cookieTokenKey = "servant-auth-cookie"
-
-cookieTokenKeyString = C.unpack cookieTokenKey
 
 type instance AuthServerData (AuthProtect "basicAuth") = UserId
 

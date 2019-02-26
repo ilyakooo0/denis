@@ -1,7 +1,10 @@
-{-# LANGUAGE DataKinds,
+{-# LANGUAGE 
+    FlexibleInstances,
+    DataKinds,
     TypeOperators,
     OverloadedStrings,
     ScopedTypeVariables #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 module Server.API (
         API,
@@ -11,32 +14,33 @@ module Server.API (
     
 import Data.Proxy
 import Servant.API
--- import Servant
-import Servant.Server.Experimental.Auth
 import Data.User
-import qualified Data.Post as P
 import Server.Auth
-import Data.ByteString
-import Data.Int (Int64)
+import Data.Int ()
 import Servant.Server
 import Data.Connection
 import Data.Query
-import Server.Auth
 import Server.App
-import Control.Monad.Error
 import Server.API.Draft
 import Server.API.Posts
 import Server.Logger
+import Servant.Docs (HasDocs, docsFor, notes, DocNote(DocNote))
+import Control.Lens
 
-maybeNotFound :: App (Maybe a) -> App a
-maybeNotFound = (>>= (\t -> case t of
-    Just y -> return y
-    Nothing -> throwError err404))
+-- MARK: Documentation
+
+instance HasDocs api => HasDocs (Authentication :> api) where
+        docsFor Proxy (endpoint, action) =
+            docsFor (Proxy :: Proxy api) (endpoint, action & notes <>~ [DocNote "Authentication" ["This method requires cookies set in the `POST /authenticate` method.\n\nReturns error `401 Unauthorized` if the cookies are invalid or don't premit access to the requested data."]])
+
+-- MARK: Implementation
+
+type Authentication = AuthProtect "basicAuth"
 
 type API = 
         LoggerAPI :<|>
         "authenticate" :> AuthenticationHandler :<|>
-            AuthProtect "basicAuth" :> (
+            Authentication :> (
             "users" :> ReqBody '[JSON] [UserId] :> Post '[JSON] [User] :<|>
             "posts" :> PostApi :<|>
             "drafts" :> DraftApi

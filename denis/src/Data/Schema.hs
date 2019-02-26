@@ -12,10 +12,6 @@ module Data.Schema (
 ) where
 
 import Squeal.PostgreSQL
-import Squeal.PostgreSQL.Expression
-import Squeal.PostgreSQL.Schema
-import Data.User
-import Data.Post
 
 type Schema = 
     '[

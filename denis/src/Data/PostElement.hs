@@ -9,7 +9,7 @@
 
 
 module Data.PostElement (
-    PostElement(..),
+    PostElement,
     ElementRow(..),
     elementsToRows,
     PostQuoteRow(..),
@@ -26,6 +26,15 @@ import qualified Data.Map.Lazy as M
 import Data.List (sortBy)
 import Data.Function (on)
 import Control.Applicative ((<|>))
+import Servant.Docs (ToSample, toSamples, samples)
+
+-- MARK: Documentation
+
+instance ToSample (PostElement p) where
+    toSamples _ = samples [
+        Markdown "# This is a markdown title\nThis is body.",
+        Markdown "## This is a subtitle\n_hello._"
+        ]
 
 
 -- MARK: PostElement

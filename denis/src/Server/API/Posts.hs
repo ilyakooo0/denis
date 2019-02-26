@@ -12,12 +12,9 @@ module Server.API.Posts (
     UserPostsRequest(..)
 ) where
 
-import Data.Proxy
 import Servant.API
 import qualified Data.Post as P
 import Data.Aeson 
-import GHC.Generics
-import Data.Int (Int64)
 import Server.App
 import Servant.Server
 import Data.Query
@@ -25,7 +22,15 @@ import Data.User
 import Data.Connection
 import Servant
 import Data.Word (Word64)
+import Servant.Docs (ToSample, toSamples, samples)
     
+-- MARK: Documentation
+
+instance ToSample UserPostsRequest where
+    toSamples _ = samples [UserPostsRequest 8 10, UserPostsRequest 42 20]
+    
+-- MARK: Implementation
+
 data UserPostsRequest = UserPostsRequest {
     userPostRequestId :: UserId,
     userPostRequestLimit :: Word64

@@ -14,21 +14,14 @@ import Network.Wai
 import Control.Concurrent.STM
 import Data.CyclicBuffer
 import Servant
-import Servant.API
-import Servant.Server
 import Data.Text.Encoding
 import qualified Data.Text as T
-import Data.Foldable
 import qualified Data.ByteString as BL
 import Data.List
 import Server.App
-import Data.CaseInsensitive (original)
-import Data.Monoid ((<>), mempty, mappend)
-import Network.HTTP.Types.Header
 import Network.Wai.Middleware.RequestLogger
 import Data.Default.Class
 import qualified System.Log.FastLogger as FL
-import Data.ByteString.Char8 (unpack)
 
 type Log = T.Text
 
