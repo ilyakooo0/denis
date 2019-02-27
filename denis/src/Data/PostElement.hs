@@ -48,6 +48,7 @@ data PostElement a = Markdown Text
     
 data ElementRow a = ElementRow {
     rowElementId :: Int64, -- the source id
+    rowElementAuthorId :: Int64,
     rowElementOrd :: Int64,
     rowElementMarkdown :: Maybe Text,
     rowElementLatex :: Maybe Text,
@@ -82,16 +83,16 @@ rowsToElements :: M.Map Int64 [ElementRow PostQuote] -> M.Map Int64 PostQuoteRow
 rowsToElements erqs pqrs = traverse elementRowToElement . sortBy (compare `on` rowElementOrd)
     where 
         elementRowToElement :: ElementRow a -> Maybe (PostElement a)
-        elementRowToElement (ElementRow _ _ (Just m) Nothing Nothing Nothing Nothing) = Just $ Markdown m
-        elementRowToElement (ElementRow _ _ Nothing (Just l) Nothing Nothing Nothing) = Just $ Latex l
-        elementRowToElement (ElementRow _ _ Nothing Nothing (Just i) Nothing Nothing) = Just $ Image i
+        elementRowToElement (ElementRow _ _ _ (Just m) Nothing Nothing Nothing Nothing) = Just $ Markdown m
+        elementRowToElement (ElementRow _ _ _ Nothing (Just l) Nothing Nothing Nothing) = Just $ Latex l
+        elementRowToElement (ElementRow _ _ _ Nothing Nothing (Just i) Nothing Nothing) = Just $ Image i
         -- elementRowToElement (ElementRow _ _ Nothing Nothing Nothing (Just q) Nothing) = 
         --     fmap Quote $ M.lookup q pqrs >>= rowsToQuote erqs pqrs
-        elementRowToElement (ElementRow _ _ Nothing Nothing Nothing Nothing (Just a)) = Just $ Attachment a
+        elementRowToElement (ElementRow _ _ _ Nothing Nothing Nothing Nothing (Just a)) = Just $ Attachment a
         elementRowToElement _ = Nothing
 
-elementsToRows :: Int64 -> [PostElement p] -> [ElementRow p]
-elementsToRows pId pb = map (uncurry finish) $ flip zip pb $ ElementRow pId <$> [0..] 
+elementsToRows :: Int64 -> Int64 -> [PostElement p] -> [ElementRow p]
+elementsToRows pId uId pb = map (uncurry finish) $ flip zip pb $ ElementRow pId uId <$> [0..] 
     where finish :: (Maybe Text -> Maybe Text -> Maybe Text -> Maybe Int64 -> Maybe Text -> ElementRow p) -> PostElement p -> ElementRow p
           finish f pe = case pe of 
             Markdown m -> f (Just m) Nothing Nothing Nothing Nothing

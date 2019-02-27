@@ -69,9 +69,8 @@ getDraftElementsQ = selectStar $ from (table #draftElements) & where_ (#rowEleme
 
 getPost :: PostId -> StaticPQ (Maybe Post)
 getPost pId = do 
-    postRow <- runQueryParams getPostRowQ (Only pId) >>= getRow 0
     postRowElements <- runQueryParams getPostElementsQ (Only pId) >>= getRows
-    return $ rowsToPost M.empty M.empty postRow postRowElements
+    return $ rowsToPost M.empty M.empty postRowElements
 
 getLastPostRowsQ :: Word64 -> Query Schema '[] (RowPG (Only PostId))
 getLastPostRowsQ n = select (#postRowId `as` #fromOnly) $ 
@@ -103,28 +102,30 @@ createPostRowQ = insertRow #posts
 createDraftElementRowsQ :: Manipulation Schema (TuplePG (ElementRow Draft)) '[]
 createDraftElementRowsQ = insertRow_ #draftElements 
     (Set (param @1) `as` #rowElementId :*
-    Set (param @2) `as` #rowElementOrd :*
-    Set (param @3) `as` #rowElementMarkdown :*
-    Set (param @4) `as` #rowElementLatex :*
-    Set (param @5) `as` #rowElementImage :*
-    Set (param @6) `as` #rowElementQuote :*
-    Set (param @7) `as` #rowElementAttachment)
+    Set (param @2) `as` #rowElementAuthorId :*
+    Set (param @3) `as` #rowElementOrd :*
+    Set (param @4) `as` #rowElementMarkdown :*
+    Set (param @5) `as` #rowElementLatex :*
+    Set (param @6) `as` #rowElementImage :*
+    Set (param @7) `as` #rowElementQuote :*
+    Set (param @8) `as` #rowElementAttachment)
 
 createPostElementRowsQ :: Manipulation Schema (TuplePG (ElementRow Post)) '[]
 createPostElementRowsQ = insertRow_ #postElements 
     (Set (param @1) `as` #rowElementId :*
-    Set (param @2) `as` #rowElementOrd :*
-    Set (param @3) `as` #rowElementMarkdown :*
-    Set (param @4) `as` #rowElementLatex :*
-    Set (param @5) `as` #rowElementImage :*
-    Set (param @6) `as` #rowElementQuote :*
-    Set (param @7) `as` #rowElementAttachment)
+    Set (param @2) `as` #rowElementAuthorId :*
+    Set (param @3) `as` #rowElementOrd :*
+    Set (param @4) `as` #rowElementMarkdown :*
+    Set (param @5) `as` #rowElementLatex :*
+    Set (param @6) `as` #rowElementImage :*
+    Set (param @7) `as` #rowElementQuote :*
+    Set (param @8) `as` #rowElementAttachment)
 
 createDraft :: UserId -> [PostElement Draft] -> StaticPQ Draft
 createDraft uId els = transactionally_ $ do
     dId' <- manipulateParams createDraftRowQ (Only uId)
     dId <- lift $ fromOnly <$> getRow 0 dId'
-    traversePrepared_ createDraftElementRowsQ $ elementsToRows dId els
+    traversePrepared_ createDraftElementRowsQ $ elementsToRows dId uId els
     return $ mkDraft dId uId els
 
 getDraftsForUserQ :: Query Schema (TuplePG (Only UserId)) (RowPG (Only DraftId))
@@ -147,9 +148,8 @@ getPostsForUser lim uId = do
 
 getDraft :: DraftId -> StaticPQ (Maybe Draft)
 getDraft dId = do 
-    draftRow <- runQueryParams getDraftRowQ (Only dId) >>= getRow 0
     draftRowElements <- runQueryParams getDraftElementsQ (Only dId) >>= getRows
-    return $ rowsToPost M.empty M.empty draftRow draftRowElements
+    return $ rowsToPost M.empty M.empty draftRowElements
 
 getDrafts :: UserId -> StaticPQ [Draft]
 getDrafts uId = do 
@@ -175,7 +175,7 @@ updateDraft uId dId els = transactionally_ $ do
         lift $ S.throwError S.err404
         else do 
             _ <- manipulateParams deleteElementsForIdQ (Only dId)
-            traversePrepared_ createDraftElementRowsQ $ elementsToRows dId els
+            traversePrepared_ createDraftElementRowsQ $ elementsToRows dId uId els
 
 getDraftElementRowsQ :: Query Schema (TuplePG (Only DraftId)) (RowPG (ElementRow Draft))
 getDraftElementRowsQ = selectStar $

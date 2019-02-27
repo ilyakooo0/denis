@@ -47,12 +47,14 @@ type Schema =
         "postElements" ::: 'Table (
             '[
                 "fk_post_quote_self_id" ::: 'ForeignKey '["rowElementId"] "posts" '["postRowId"],
+                "fk_post_element_user_id" ::: 'ForeignKey '["rowElementAuthorId"] "users" '["userId"],
                 "fk_post_quote_id" ::: 'ForeignKey '["rowElementQuote"] "quotes" '["quoteRowId"]
                 -- ,
                 -- "unique_post_quote" ::: 'Check '["rowElementOrd", "rowElementMarkdown", "rowElementLatex", "rowElementImage", "rowElementQuote", "rowElementAttachment"]
                 ] :=>
             '[
                 "rowElementId" ::: 'NoDef :=> 'NotNull 'PGint8,
+                "rowElementAuthorId" ::: 'NoDef :=> 'NotNull 'PGint8,
                 "rowElementOrd" ::: 'NoDef :=> 'NotNull 'PGint8,
                 "rowElementMarkdown" ::: 'NoDef :=> 'Null 'PGtext,
                 "rowElementLatex" ::: 'NoDef :=> 'Null 'PGtext,
@@ -63,12 +65,14 @@ type Schema =
         "quoteElements" ::: 'Table (
             '[
                 "fk_quotes_quote_self_id" ::: 'ForeignKey '["rowElementId"] "quotes" '["quoteRowId"],
+                "fk_quote_element_user_id" ::: 'ForeignKey '["rowElementAuthorId"] "users" '["userId"],
                 "fk_quote_quote_id" ::: 'ForeignKey '["rowElementQuote"] "quotes" '["quoteRowId"]
                 -- ,
                 -- "unique_quote_quote" ::: 'Check '["rowElementOrd", "rowElementMarkdown", "rowElementLatex", "rowElementImage", "rowElementQuote", "rowElementAttachment"]
                 ] :=>
             '[
                 "rowElementId" ::: 'NoDef :=> 'NotNull 'PGint8,
+                "rowElementAuthorId" ::: 'NoDef :=> 'NotNull 'PGint8,
                 "rowElementOrd" ::: 'NoDef :=> 'NotNull 'PGint8,
                 "rowElementMarkdown" ::: 'NoDef :=> 'Null 'PGtext,
                 "rowElementLatex" ::: 'NoDef :=> 'Null 'PGtext,
@@ -79,12 +83,14 @@ type Schema =
             "draftElements" ::: 'Table (
             '[
                 "fk_draft_quote_self_id" ::: 'ForeignKey '["rowElementId"] "drafts" '["postRowId"],
+                "fk_draft_element_user_id" ::: 'ForeignKey '["rowElementAuthorId"] "users" '["userId"],
                 "fk_draft_quote_id" ::: 'ForeignKey '["rowElementQuote"] "quotes" '["quoteRowId"]
                 -- ,
                 -- "unique_post_quote" ::: 'Check '["rowElementOrd", "rowElementMarkdown", "rowElementLatex", "rowElementImage", "rowElementQuote", "rowElementAttachment"]
                 ] :=>
             '[
                 "rowElementId" ::: 'NoDef :=> 'NotNull 'PGint8,
+                "rowElementAuthorId" ::: 'NoDef :=> 'NotNull 'PGint8,
                 "rowElementOrd" ::: 'NoDef :=> 'NotNull 'PGint8,
                 "rowElementMarkdown" ::: 'NoDef :=> 'Null 'PGtext,
                 "rowElementLatex" ::: 'NoDef :=> 'Null 'PGtext,
@@ -123,6 +129,7 @@ createTables = createTable #users (
             foreignKey #postRowAuthorId #users #userId OnDeleteCascade OnUpdateCascade `as` #fk_draft_author_id 
     ) >>> createTable #postElements (
         notNullable int8 `as` #rowElementId :*
+        notNullable int8 `as` #rowElementAuthorId :*
         notNullable int8 `as` #rowElementOrd :*
         nullable text `as` #rowElementMarkdown :*
         nullable text `as` #rowElementLatex :*
@@ -131,9 +138,11 @@ createTables = createTable #users (
         nullable text `as` #rowElementAttachment
         ) (
             foreignKey #rowElementId #posts #postRowId OnDeleteCascade OnUpdateCascade `as` #fk_post_quote_self_id :*
+            foreignKey #rowElementAuthorId #users #userId OnDeleteCascade OnUpdateCascade `as` #fk_post_element_user_id :*
             foreignKey #rowElementQuote #quotes #quoteRowId OnDeleteCascade OnUpdateCascade `as` #fk_post_quote_id 
     ) >>> createTable #quoteElements (
         notNullable int8 `as` #rowElementId :*
+        notNullable int8 `as` #rowElementAuthorId :*
         notNullable int8 `as` #rowElementOrd :*
         nullable text `as` #rowElementMarkdown :*
         nullable text `as` #rowElementLatex :*
@@ -142,9 +151,11 @@ createTables = createTable #users (
         nullable text `as` #rowElementAttachment
         ) (
             foreignKey #rowElementId #quotes #quoteRowId OnDeleteCascade OnUpdateCascade `as` #fk_quotes_quote_self_id :*
+            foreignKey #rowElementAuthorId #users #userId OnDeleteCascade OnUpdateCascade `as` #fk_quote_element_user_id :*
             foreignKey #rowElementQuote #quotes #quoteRowId OnDeleteCascade OnUpdateCascade `as` #fk_quote_quote_id 
     ) >>> createTable #draftElements (
         notNullable int8 `as` #rowElementId :*
+        notNullable int8 `as` #rowElementAuthorId :*
         notNullable int8 `as` #rowElementOrd :*
         nullable text `as` #rowElementMarkdown :*
         nullable text `as` #rowElementLatex :*
@@ -153,6 +164,7 @@ createTables = createTable #users (
         nullable text `as` #rowElementAttachment
         ) (
             foreignKey #rowElementId #drafts #postRowId OnDeleteCascade OnUpdateCascade `as` #fk_draft_quote_self_id :*
+            foreignKey #rowElementAuthorId #users #userId OnDeleteCascade OnUpdateCascade `as` #fk_draft_element_user_id :*
             foreignKey #rowElementQuote #quotes #quoteRowId OnDeleteCascade OnUpdateCascade `as` #fk_draft_quote_id 
         )
 -- quoteUniquenessCheck :: TableConstraintExpression Schema _ (Check '["rowElementOrd", "rowElementMarkdown", "rowElementLatex", "rowElementImage", "rowElementQuote", "rowElementAttachment"])

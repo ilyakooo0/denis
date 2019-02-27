@@ -84,13 +84,17 @@ postToRow :: Post -> PostRow
 postToRow (PostData pId aId _) = PostRow pId aId
 
 postToElementRows :: PostData p -> [ElementRow (PostData p)]
-postToElementRows (PostData pId _ pb) = elementsToRows pId pb
+postToElementRows (PostData pId uId pb) = elementsToRows pId uId pb
 
-rowsToPost :: M.Map Int64 [ElementRow PostQuote] -> M.Map Int64 PostQuoteRow -> PostRow -> [ElementRow (PostData p)] -> Maybe (PostData p)
-rowsToPost erqs pqrs (PostRow pId aId) elementRows = PostData pId aId <$> rowsToElements erqs pqrs elementRows
+rowsToPost :: M.Map Int64 [ElementRow PostQuote] -> M.Map Int64 PostQuoteRow -> [ElementRow (PostData p)] -> Maybe (PostData p)
+rowsToPost erqs pqrs [] = Nothing
+rowsToPost erqs pqrs elementRows = let 
+    pId = rowElementId . head $ elementRows
+    uId = rowElementAuthorId . head $ elementRows
+    in PostData pId uId <$> rowsToElements erqs pqrs elementRows
 
 fromDraft :: PostId -> ElementRow Draft -> ElementRow Post
-fromDraft pId (ElementRow _ b c d e f g) = ElementRow pId b c d e f g
+fromDraft pId (ElementRow _ uId b c d e f g) = ElementRow pId uId b c d e f g
                   
 -- tupleFirst :: (a -> b) -> a -> (b, a)
 -- tupleFirst f a = (f a, a)
