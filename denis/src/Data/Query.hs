@@ -108,12 +108,13 @@ createPostRowQ = insertRow #posts
 createPostElementRowsQ :: Manipulation Schema (TuplePG (PostElementRow Post)) '[]
 createPostElementRowsQ = insertRow_ #postElements 
     (Set (param @1) `as` #rowElementId :*
-    Set (param @2) `as` #rowElementOrd :*
-    Set (param @3) `as` #rowElementMarkdown :*
-    Set (param @4) `as` #rowElementLatex :*
-    Set (param @5) `as` #rowElementImage :*
-    Set (param @6) `as` #rowElementQuote :*
-    Set (param @7) `as` #rowElementAttachment)
+    Set (param @2) `as` #rowElementAuthorId :*
+    Set (param @3) `as` #rowElementOrd :*
+    Set (param @4) `as` #rowElementMarkdown :*
+    Set (param @5) `as` #rowElementLatex :*
+    Set (param @6) `as` #rowElementImage :*
+    Set (param @7) `as` #rowElementQuote :*
+    Set (param @8) `as` #rowElementAttachment)
 
 -- MARK: FrontEnd functions
 
