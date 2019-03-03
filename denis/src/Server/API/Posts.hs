@@ -44,7 +44,8 @@ instance FromJSON UserPostsRequest where
 
 type PostApi = ReqBody '[JSON] [P.PostId] :> Post '[JSON] [P.Post] :<|>
     "last" :> ReqBody '[JSON] Word64 :> Post '[JSON] [P.Post] :<|>
-    "forUser" :> ReqBody '[JSON] UserPostsRequest :> Post '[JSON] [P.Post]
+    "forUser" :> ReqBody '[JSON] UserPostsRequest :> Post '[JSON] [P.Post] :<|>
+    "publish" :> ReqBody '[JSON] [P.PostElement P.Post] :> Post '[JSON] P.PostId
 
 maybeNotFound :: App (Maybe a) -> App a
 maybeNotFound = (>>= (\t -> case t of
@@ -53,13 +54,16 @@ maybeNotFound = (>>= (\t -> case t of
     
     
 postApi :: UserId -> ServerT PostApi App
-postApi uId = getPosts :<|> lastPosts :<|> getPostsForUserApi
+postApi uId = getPosts :<|> lastPosts :<|> getPostsForUserApi :<|> publishPostApi uId
 
 getPosts :: [P.PostId] -> App [P.Post]
 getPosts = mapM (maybeNotFound . runQnotFound . getPost) 
 
 lastPosts :: Word64 -> App [P.Post]
-lastPosts = runQnotFound . getLastPosts
+lastPosts = maybeNotFound . runQnotFound . getLastPosts
 
 getPostsForUserApi :: UserPostsRequest -> App [P.Post]
-getPostsForUserApi (UserPostsRequest uId lim) = runQnotFound $ getPostsForUser lim uId
+getPostsForUserApi (UserPostsRequest uId lim) = maybeNotFound . runQnotFound $ getPostsForUser lim uId
+
+publishPostApi :: UserId -> [P.PostElement P.Post] -> App P.PostId
+publishPostApi uId = runQerror . publishPost uId

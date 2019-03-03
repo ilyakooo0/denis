@@ -21,7 +21,6 @@ import Servant.Server
 import Data.Connection
 import Data.Query
 import Server.App
-import Server.API.Draft
 import Server.API.Posts
 import Server.Logger
 import Servant.Docs (HasDocs, docsFor, notes, DocNote(DocNote))
@@ -42,8 +41,7 @@ type API =
         "authenticate" :> AuthenticationHandler :<|>
             Authentication :> (
             "users" :> ReqBody '[JSON] [UserId] :> Post '[JSON] [User] :<|>
-            "posts" :> PostApi :<|>
-            "drafts" :> DraftApi
+            "posts" :> PostApi
             )
 
 serverProxy :: Proxy API
@@ -54,8 +52,7 @@ mkServerAPI l =
         l :<|> 
         authenticate :<|> (\uId -> 
         mapM (runQnotFound . getUser) :<|>
-        postApi uId :<|>
-        draftApi uId
+        postApi uId
         )
 
 -- getPostsS :: [UserId] -> App [User]

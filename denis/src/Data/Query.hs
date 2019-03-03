@@ -4,46 +4,76 @@
     OverloadedLabels,
     OverloadedStrings ,
     TypeApplications ,
-    TypeOperators #-}
+    TypeOperators,
+    PartialTypeSignatures #-}
+
+{-# OPTIONS_GHC -Wno-partial-type-signatures #-}
+
 
 module Data.Query (
     Schema,
     createTables,
     getPost,
     getUser,
-    createDraft,
-    updateDraft,
-    publishDraft,
-    getDrafts,
     getLastPosts,
-    getPostsForUser
+    getPostsForUser,
+    Limit,
+    publishPost
 ) where
 
 import Squeal.PostgreSQL
 import Data.User
 import Data.Post
 import Data.Schema
--- import Data.Function (on)
-import qualified Data.Map.Lazy as M
+import Data.Function (on)
 import Data.Connection
 import Data.PostElement
 import qualified Servant as S
 import Control.Monad.Morph
-import Data.Maybe
 import Data.Word (Word64)
+import qualified Data.List as L
 
 
-getQuoteRowsQ :: Query Schema (TuplePG (Only QuoteId)) (RowPG (ElementRow Post))
-getQuoteRowsQ = UnsafeQuery "WITH RECURSIVE getQuote AS ( \
-    \SELECT * FROM \"quoteElements\" quote WHERE \"rowElementId\" = $1 \
-    \UNION ALL \
-    \SELECT newQuote.* FROM \"quoteElements\" newQuote \
-    \INNER JOIN getQuote q ON q.\"rowElementQuote\" = newQuote.\"rowElementId\" \
-    \) \
-    \SELECT * FROM getQuote"
+-- MARK: Generalized Post Queries
 
-getQuoteQ :: Query Schema (TuplePG (Only QuoteId)) (RowPG PostQuoteRow)
-getQuoteQ = selectStar $ from (table #quotes) & where_ (#quoteRowId .== param @1)
+type TableEndo schema params from grouping = TableExpression schema params from grouping ->
+    TableExpression schema params from grouping
+
+postsQ :: TableEndo Schema params _ 'Ungrouped -> Query Schema params _
+postsQ te = selectStar $ te (from $ table #posts)
+
+postViewT :: TableEndo Schema params _ 'Ungrouped -> TableExpression Schema params _ 'Ungrouped
+postViewT te = from $ subquery (postsQ te `As` #posts) & 
+    innerJoin (table #postElements)
+    (#posts ! #postRowId .== #postElements ! #rowElementId)
+
+getPostQ :: TableEndo Schema params _ 'Ungrouped -> TableEndo Schema params _ 'Ungrouped -> Query Schema params (RowPG PostRowResponse)
+getPostQ oTe te = select (
+    #posts ! #postRowId :*
+    #posts ! #postRowAuthorId :*
+    --  #rowElementId :*
+    #postElements ! #rowElementOrd :*
+    #postElements ! #rowElementMarkdown :*
+    #postElements ! #rowElementLatex :*
+    #postElements ! #rowElementImage :*
+    #postElements ! #rowElementQuote :*
+    #postElements ! #rowElementAttachment)  
+    (oTe $ postViewT te)
+
+
+-- MARK: Concrete Queries
+
+-- getQuoteRowsQ :: Query Schema (TuplePG (Only QuoteId)) (RowPG (ElementRow Post))
+-- getQuoteRowsQ = UnsafeQuery "WITH RECURSIVE getQuote AS ( \
+--     \SELECT * FROM \"quoteElements\" quote WHERE \"rowElementId\" = $1 \
+--     \UNION ALL \
+--     \SELECT newQuote.* FROM \"quoteElements\" newQuote \
+--     \INNER JOIN getQuote q ON q.\"rowElementQuote\" = newQuote.\"rowElementId\" \
+--     \) \
+--     \SELECT * FROM getQuote"
+
+-- getQuoteQ :: Query Schema (TuplePG (Only QuoteId)) (RowPG PostQuoteRow)
+-- getQuoteQ = selectStar $ from (table #quotes) & where_ (#quoteRowId .== param @1)
 
 -- getQuote :: QuoteId -> PQ Quote
 -- getQuote qId = do
@@ -55,62 +85,27 @@ getQuoteQ = selectStar $ from (table #quotes) & where_ (#quoteRowId .== param @1
 getUserQ :: Query Schema (TuplePG (Only UserId)) (RowPG User)
 getUserQ = selectStar $ from (table #users) & where_ (#userId .== param @1)
 
-getPostRowQ :: Query Schema (TuplePG (Only PostId)) (RowPG PostRow)
-getPostRowQ = selectStar $ from (table #posts) & where_ (#postRowId .== param @1)
+getPostByIdQ :: Query Schema (TuplePG (Only PostId)) (RowPG PostRowResponse)
+getPostByIdQ = getPostQ id $ where_ $ #postRowId .== param @1
 
-getDraftRowQ :: Query Schema (TuplePG (Only DraftId)) (RowPG PostRow)
-getDraftRowQ = selectStar $ from (table #drafts) & where_ (#postRowId .== param @1)
+type Limit = Word64
 
-getPostElementsQ :: Query Schema (TuplePG (Only PostId)) (RowPG (ElementRow Post))
-getPostElementsQ = selectStar $ from (table #postElements) & where_ (#rowElementId .== param @1)
+getLastNPostsQ :: Limit -> Query Schema params (RowPG PostRowResponse)
+getLastNPostsQ lim = getPostQ 
+    (limit lim . orderBy [#posts ! #postRowId & Desc]) id
 
-getDraftElementsQ :: Query Schema (TuplePG (Only DraftId)) (RowPG (ElementRow Draft))
-getDraftElementsQ = selectStar $ from (table #draftElements) & where_ (#rowElementId .== param @1)
-
-getPost :: PostId -> StaticPQ (Maybe Post)
-getPost pId = do 
-    postRow <- runQueryParams getPostRowQ (Only pId) >>= getRow 0
-    postRowElements <- runQueryParams getPostElementsQ (Only pId) >>= getRows
-    return $ rowsToPost M.empty M.empty postRow postRowElements
-
-getLastPostRowsQ :: Word64 -> Query Schema '[] (RowPG (Only PostId))
-getLastPostRowsQ n = select (#postRowId `as` #fromOnly) $ 
-    (from $ table #posts) &
-    orderBy [#postRowId & Desc] &
-    limit n
-
-getLastPosts :: Word64 -> StaticPQ [Post]
-getLastPosts n = do 
-    postIds <- runQuery (getLastPostRowsQ n) >>= getRows
-    catMaybes <$> traverse getPost (map fromOnly postIds)
-
-getUser :: UserId -> StaticPQ User
-getUser uId = runQueryParams getUserQ (Only uId) >>= getRow 0
-
-
-createDraftRowQ :: Manipulation Schema (TuplePG (Only UserId)) (RowPG (Only DraftId))
-createDraftRowQ = insertRow #drafts 
-    (Default `as` #postRowId :* Set (param @1) `as` #postRowAuthorId) 
-    OnConflictDoRaise 
-    (Returning $ #postRowId `as` #fromOnly)
-
+getLastNPostsForUserQ :: Limit -> Query Schema (TuplePG (Only UserId)) (RowPG PostRowResponse)
+getLastNPostsForUserQ lim = getPostQ 
+    (limit lim . orderBy [#posts ! #postRowId & Desc]) 
+    (where_ $ #postRowAuthorId .== param @1)
+    
 createPostRowQ :: Manipulation Schema (TuplePG (Only UserId)) (RowPG (Only PostId))
 createPostRowQ = insertRow #posts 
     (Default `as` #postRowId :* Set (param @1) `as` #postRowAuthorId) 
     OnConflictDoRaise 
     (Returning $ #postRowId `as` #fromOnly)
 
-createDraftElementRowsQ :: Manipulation Schema (TuplePG (ElementRow Draft)) '[]
-createDraftElementRowsQ = insertRow_ #draftElements 
-    (Set (param @1) `as` #rowElementId :*
-    Set (param @2) `as` #rowElementOrd :*
-    Set (param @3) `as` #rowElementMarkdown :*
-    Set (param @4) `as` #rowElementLatex :*
-    Set (param @5) `as` #rowElementImage :*
-    Set (param @6) `as` #rowElementQuote :*
-    Set (param @7) `as` #rowElementAttachment)
-
-createPostElementRowsQ :: Manipulation Schema (TuplePG (ElementRow Post)) '[]
+createPostElementRowsQ :: Manipulation Schema (TuplePG (PostElementRow Post)) '[]
 createPostElementRowsQ = insertRow_ #postElements 
     (Set (param @1) `as` #rowElementId :*
     Set (param @2) `as` #rowElementOrd :*
@@ -120,84 +115,38 @@ createPostElementRowsQ = insertRow_ #postElements
     Set (param @6) `as` #rowElementQuote :*
     Set (param @7) `as` #rowElementAttachment)
 
-createDraft :: UserId -> [PostElement Draft] -> StaticPQ Draft
-createDraft uId els = transactionally_ $ do
-    dId' <- manipulateParams createDraftRowQ (Only uId)
-    dId <- lift $ fromOnly <$> getRow 0 dId'
-    traversePrepared_ createDraftElementRowsQ $ elementsToRows dId els
-    return $ mkDraft dId uId els
+-- MARK: FrontEnd functions
 
-getDraftsForUserQ :: Query Schema (TuplePG (Only UserId)) (RowPG (Only DraftId))
-getDraftsForUserQ = select (#postRowId `as` #fromOnly) $
-    (from $ table #drafts) &
-    where_ (#postRowAuthorId .== param @1)
-    
-getPostsForUserLimitingQ :: Word64 -> Query Schema (TuplePG (Only UserId)) (RowPG (Only DraftId))
-getPostsForUserLimitingQ lim = select (#postRowId `as` #fromOnly) $
-    (from $ table #posts) &
-    where_ (#postRowAuthorId .== param @1) &
-    orderBy [#postRowId & Desc] &
-    limit lim
-    
-getPostsForUser :: Word64 -> UserId -> StaticPQ [Post]
+getPostsForUser :: Word64 -> UserId -> StaticPQ (Maybe [Post])
 getPostsForUser lim uId = do 
-    postIds <- runQueryParams (getPostsForUserLimitingQ lim) (Only uId) >>= getRows
-    catMaybes <$> traverse getPost (map fromOnly postIds)
-    
+    postRows <- runQueryParams (getLastNPostsForUserQ lim) (Only uId) >>= getRows
+    return . foldMaybe . map rowsToPost . L.groupBy ((==) `on` postRowId) $ postRows    
 
-getDraft :: DraftId -> StaticPQ (Maybe Draft)
-getDraft dId = do 
-    draftRow <- runQueryParams getDraftRowQ (Only dId) >>= getRow 0
-    draftRowElements <- runQueryParams getDraftElementsQ (Only dId) >>= getRows
-    return $ rowsToPost M.empty M.empty draftRow draftRowElements
+getPost :: PostId -> StaticPQ (Maybe Post)
+getPost pId = do 
+    postRow <- runQueryParams getPostByIdQ (Only pId) >>= getRows
+    return $ rowsToPost postRow
 
-getDrafts :: UserId -> StaticPQ [Draft]
-getDrafts uId = do 
-    draftRow <- runQueryParams getDraftsForUserQ (Only uId) >>= getRows
-    catMaybes <$> traverse getDraft (map fromOnly draftRow)
+getLastPosts :: Word64 -> StaticPQ (Maybe [Post])
+getLastPosts n = do 
+    postRows <- runQuery (getLastNPostsQ n) >>= getRows
+    return . foldMaybe . map rowsToPost . L.groupBy ((==) `on` postRowId) $ postRows
 
-getDraftForUserWithIdQ :: Query Schema (TuplePG (UserId, DraftId)) (RowPG PostRow)
-getDraftForUserWithIdQ = selectStar $
-    (from $ table #drafts) &
-    where_ (#postRowAuthorId .== param @1 .&& #postRowId .== param @2)
+getUser :: UserId -> StaticPQ User
+getUser uId = runQueryParams getUserQ (Only uId) >>= getRow 0
+   
+publishPost :: UserId -> [PostElement Post] -> StaticPQ PostId
+publishPost uId els = transactionally_ $ do
+    pId' <- manipulateParams createPostRowQ (Only uId) >>= firstRow
+    case pId' of
+        (Just (Only pId)) -> do
+            traversePrepared_ createPostElementRowsQ $ elementsToRows pId els
+            return pId
+        _ -> lift $ S.throwError S.err404
 
-deleteElementsForIdQ :: Manipulation Schema (TuplePG (Only DraftId)) '[]
-deleteElementsForIdQ = deleteFrom_ #draftElements (#rowElementId .== param @1)
+-- MARK: Utils
 
-deleteDraftQ :: Manipulation Schema (TuplePG (Only DraftId)) '[]
-deleteDraftQ = deleteFrom_ #drafts (#postRowId .== param @1)
-
-updateDraft :: UserId -> DraftId -> [PostElement Draft] -> StaticPQ ()
-updateDraft uId dId els = transactionally_ $ do
-    rs <- runQueryParams getDraftForUserWithIdQ (uId, dId) >>= getRows
-    let c = length (rs :: [PostRow])
-    if c /= 1 then
-        lift $ S.throwError S.err404
-        else do 
-            _ <- manipulateParams deleteElementsForIdQ (Only dId)
-            traversePrepared_ createDraftElementRowsQ $ elementsToRows dId els
-
-getDraftElementRowsQ :: Query Schema (TuplePG (Only DraftId)) (RowPG (ElementRow Draft))
-getDraftElementRowsQ = selectStar $
-    (from $ table #draftElements) &
-    where_ (#rowElementId .== param @1) &
-    orderBy [#rowElementOrd & Asc]
-
-publishDraft :: UserId -> DraftId -> StaticPQ ()
-publishDraft uId dId = transactionally_ $ do
-    rs <- runQueryParams getDraftForUserWithIdQ (uId, dId) >>= getRows
-    let c = length (rs :: [PostRow])
-    if c /= 1 then
-        lift $ S.throwError S.err404
-        else do 
-            els <- runQueryParams getDraftElementRowsQ (Only dId) >>= getRows
-            pId' <- manipulateParams createPostRowQ (Only uId)
-            pId <- lift $ fromOnly <$> getRow 0 pId'
-            traversePrepared_ createPostElementRowsQ $ map (fromDraft pId) els
-            _ <- manipulateParams deleteDraftQ (Only dId)
-            return ()
-        
-
--- tupleFirst :: (a -> b) -> a -> (b, a)
--- tupleFirst f x = (f x, x)
-
+foldMaybe :: [Maybe a] -> Maybe [a]
+foldMaybe [] = Just []
+foldMaybe (Nothing : _) = Nothing
+foldMaybe (Just x : xs) = (x :) <$> foldMaybe xs

@@ -4,7 +4,10 @@
     OverloadedLabels,
     OverloadedStrings ,
     TypeApplications ,
-    TypeOperators #-}
+    TypeOperators,
+    OverloadedStrings,
+    KindSignatures #-}
+
 
 module Data.Schema (
     Schema,
@@ -37,13 +40,6 @@ type Schema =
                 "quoteRowId" ::: 'Def :=> 'NotNull 'PGint8,
                 "quoteRowPostId" ::: 'NoDef :=> 'NotNull 'PGint8
             ]),
-        "drafts" ::: 'Table ( '[
-            "pk_drafts" ::: 'PrimaryKey '["postRowId"],
-            "fk_draft_author_id" ::: 'ForeignKey '["postRowAuthorId"] "users" '["userId"]] :=>
-            '[
-                "postRowId" ::: 'Def :=> 'NotNull 'PGint8,
-                "postRowAuthorId" ::: 'NoDef :=> 'NotNull 'PGint8
-            ]),
         "postElements" ::: 'Table (
             '[
                 "fk_post_quote_self_id" ::: 'ForeignKey '["rowElementId"] "posts" '["postRowId"],
@@ -75,24 +71,20 @@ type Schema =
                 "rowElementImage" ::: 'NoDef :=> 'Null 'PGtext,
                 "rowElementQuote" ::: 'NoDef :=> 'Null 'PGint8,                
                 "rowElementAttachment" ::: 'NoDef :=> 'Null 'PGtext
-            ]),
-            "draftElements" ::: 'Table (
-            '[
-                "fk_draft_quote_self_id" ::: 'ForeignKey '["rowElementId"] "drafts" '["postRowId"],
-                "fk_draft_quote_id" ::: 'ForeignKey '["rowElementQuote"] "quotes" '["quoteRowId"]
-                -- ,
-                -- "unique_post_quote" ::: 'Check '["rowElementOrd", "rowElementMarkdown", "rowElementLatex", "rowElementImage", "rowElementQuote", "rowElementAttachment"]
-                ] :=>
-            '[
-                "rowElementId" ::: 'NoDef :=> 'NotNull 'PGint8,
-                "rowElementOrd" ::: 'NoDef :=> 'NotNull 'PGint8,
-                "rowElementMarkdown" ::: 'NoDef :=> 'Null 'PGtext,
-                "rowElementLatex" ::: 'NoDef :=> 'Null 'PGtext,
-                "rowElementImage" ::: 'NoDef :=> 'Null 'PGtext,
-                "rowElementQuote" ::: 'NoDef :=> 'Null 'PGint8,                
-                "rowElementAttachment" ::: 'NoDef :=> 'Null 'PGtext
+            -- ]),
+        -- "postsView" ::: 'View (RowPG PostRowResponse)
+            -- ('[
+            --     "postRowId" ::: 'NotNull 'PGint8,
+            --     "postRowAuthorId" ::: 'NotNull 'PGint8,
+            --     "rowElementId" ::: 'NotNull 'PGint8,
+            --     "rowElementOrd" ::: 'NotNull 'PGint8,
+            --     "rowElementMarkdown" ::: 'Null 'PGtext,
+            --     "rowElementLatex" ::: 'Null 'PGtext,
+            --     "rowElementImage" ::: 'Null 'PGtext,
+            --     "rowElementQuote" ::: 'Null 'PGint8,    
+            --     "rowElementAttachment" ::: 'Null 'PGtext
             ])
-      
+            
     ]
     
 
@@ -115,12 +107,6 @@ createTables = createTable #users (
         ) (
             primaryKey #quoteRowId `as` #pk_post_quotes :*
             foreignKey #quoteRowPostId #posts #postRowId OnDeleteCascade OnUpdateCascade `as` #fk_quote_post_id 
-    ) >>> createTable #drafts (
-        serial8 `as` #postRowId :*
-        notNullable int8 `as` #postRowAuthorId
-        ) (
-            primaryKey #postRowId `as` #pk_drafts :*
-            foreignKey #postRowAuthorId #users #userId OnDeleteCascade OnUpdateCascade `as` #fk_draft_author_id 
     ) >>> createTable #postElements (
         notNullable int8 `as` #rowElementId :*
         notNullable int8 `as` #rowElementOrd :*
@@ -143,18 +129,21 @@ createTables = createTable #users (
         ) (
             foreignKey #rowElementId #quotes #quoteRowId OnDeleteCascade OnUpdateCascade `as` #fk_quotes_quote_self_id :*
             foreignKey #rowElementQuote #quotes #quoteRowId OnDeleteCascade OnUpdateCascade `as` #fk_quote_quote_id 
-    ) >>> createTable #draftElements (
-        notNullable int8 `as` #rowElementId :*
-        notNullable int8 `as` #rowElementOrd :*
-        nullable text `as` #rowElementMarkdown :*
-        nullable text `as` #rowElementLatex :*
-        nullable text `as` #rowElementImage :*
-        nullable int8 `as` #rowElementQuote :*
-        nullable text `as` #rowElementAttachment
-        ) (
-            foreignKey #rowElementId #drafts #postRowId OnDeleteCascade OnUpdateCascade `as` #fk_draft_quote_self_id :*
-            foreignKey #rowElementQuote #quotes #quoteRowId OnDeleteCascade OnUpdateCascade `as` #fk_draft_quote_id 
-        )
+    -- ) >>> createView #postsView (select (
+    --     #posts ! #postRowId :*
+    --     #posts ! #postRowAuthorId :*
+    --     --  #rowElementId :*
+    --     #postElements ! #rowElementOrd :*
+    --     #postElements ! #rowElementMarkdown :*
+    --     #postElements ! #rowElementLatex :*
+    --     #postElements ! #rowElementImage :*
+    --     #postElements ! #rowElementQuote :*
+    --     #postElements ! #rowElementAttachment
+    --     ) (
+    --     from ((table #posts) & 
+    --         (innerJoin (table #postElements)
+    --             (#posts ! #postRowId .== #postElements ! #rowElementId))))
+    )
 -- quoteUniquenessCheck :: TableConstraintExpression Schema _ (Check '["rowElementOrd", "rowElementMarkdown", "rowElementLatex", "rowElementImage", "rowElementQuote", "rowElementAttachment"])
 -- quoteUniquenessCheck = check (#rowElementOrd :* #rowElementMarkdown :* #rowElementLatex :* #rowElementImage :* #rowElementQuote :* #rowElementAttachment) $
 --     ((ifThenElse (isNull #rowElementOrd) 1 0) +

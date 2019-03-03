@@ -19,7 +19,6 @@ import Data.User
 import Data.Int (Int64)
 import Data.Word (Word64)
 import Server.API.Posts
-import Server.API.Draft
 import Server.Logger
 
 main = writeFile "docs.md" . markdown . docs . pretty $ serverProxy 

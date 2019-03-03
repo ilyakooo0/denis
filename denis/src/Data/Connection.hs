@@ -11,7 +11,8 @@ module Data.Connection (
     StaticPQ,
     runQ,
     runQ',
-    runQnotFound
+    runQnotFound,
+    runQerror
 ) where
 
 import Squeal.PostgreSQL
@@ -33,3 +34,6 @@ runQ' conn err req = handleSqueal (const $ throwError err) $ runPoolPQ req conn
 
 runQnotFound :: StaticPQ a -> App a
 runQnotFound = runQ err404
+
+runQerror :: StaticPQ a -> App a
+runQerror = runQ err500
