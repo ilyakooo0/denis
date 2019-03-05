@@ -10,12 +10,6 @@
 module Data.Post (
     Post(..),
     PostElement,
-    -- PostQuote(..),
-    -- PostRow,
-    -- PostQuoteRow,
-    -- ElementRow,
-    postToRows,
-    -- postToElementRows,
     rowsToPost,
     PostId,
     QuoteId,
@@ -31,11 +25,14 @@ import Data.Proxy
 import Data.PostElement
 import Data.Text (Text)
 import Data.Function (on)
+import Data.Time.Clock
+import Data.Time.Calendar
 
 -- MARK: Documentation
 
 instance ToSample Post where
-    toSamples _ = samples $ [Post 8 17] <*> (map snd $ toSamples Proxy)
+    toSamples _ = samples $ [Post 8 17 time] <*> (map snd $ toSamples Proxy)
+        where time = UTCTime (ModifiedJulianDay 1000) 8
 
 
 -- MARK: Actual type 
@@ -46,13 +43,15 @@ type QuoteId = Int64
 data Post = Post {
     postId :: Int64,
     postAuthorId :: Int64,
+    updated :: UTCTime,
     postBody :: [PostElement Post]
 }
 
 instance ToJSON Post where
-    toJSON (Post pId aId pb) = object [
+    toJSON (Post pId aId tm pb) = object [
         "id" .= pId,
         "authorId" .= aId,
+        "updated" .= tm,
         "body" .= pb ] 
 
 
@@ -64,6 +63,7 @@ data PostRowResponse = PostRowResponse {
     -- PostRow
     postRowId :: Int64,
     postRowAuthorId :: Int64,
+    postRowUpdateTime :: UTCTime,
 
     -- ElementRow
     rowElementOrd :: Int64,
@@ -78,13 +78,10 @@ instance SOP.Generic PostRowResponse
 instance SOP.HasDatatypeInfo PostRowResponse
 
 unRow :: MkElementRow x -> PostRowResponse -> x
-unRow f' (PostRowResponse _ _ _ a b c d e) = f' a b c d e
-
-postToRows :: Post -> [PostRowResponse]
-postToRows (Post pId uId els) = map (\(el, f) -> elemenToRow f el) . zip els . map (PostRowResponse pId uId) $ [0..]
+unRow f' (PostRowResponse _ _ _ _ a b c d e) = f' a b c d e
 
 rowsToPost :: [PostRowResponse] -> Maybe Post
 rowsToPost [] = Nothing
 rowsToPost (el:els) = if all (((==) `on` postRowId) el) els
-    then Post (postRowId el) (postRowAuthorId el) <$> traverse (unRow rowsToElement) (el:els)
+    then Post (postRowId el) (postRowAuthorId el) (postRowUpdateTime el) <$> traverse (unRow rowsToElement) (el:els)
     else Nothing

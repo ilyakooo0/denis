@@ -51,6 +51,7 @@ getPostQ :: TableEndo Schema params _ 'Ungrouped -> TableEndo Schema params _ 'U
 getPostQ oTe te = select (
     #posts ! #postRowId :*
     #posts ! #postRowAuthorId :*
+    #posts ! #postRowUpdateTime :*
     --  #rowElementId :*
     #postElements ! #rowElementOrd :*
     #postElements ! #rowElementMarkdown :*
@@ -92,29 +93,30 @@ type Limit = Word64
 
 getLastNPostsQ :: Limit -> Query Schema params (RowPG PostRowResponse)
 getLastNPostsQ lim = getPostQ 
-    (limit lim . orderBy [#posts ! #postRowId & Desc]) id
+    (limit lim . orderBy [#posts ! #postRowUpdateTime & Desc]) id
 
 getLastNPostsForUserQ :: Limit -> Query Schema (TuplePG (Only UserId)) (RowPG PostRowResponse)
 getLastNPostsForUserQ lim = getPostQ 
-    (limit lim . orderBy [#posts ! #postRowId & Desc]) 
+    (limit lim . orderBy [#posts ! #postRowUpdateTime & Desc]) 
     (where_ $ #postRowAuthorId .== param @1)
     
 createPostRowQ :: Manipulation Schema (TuplePG (Only UserId)) (RowPG (Only PostId))
 createPostRowQ = insertRow #posts 
-    (Default `as` #postRowId :* Set (param @1) `as` #postRowAuthorId) 
+    (Default `as` #postRowId :*
+     Set (param @1) `as` #postRowAuthorId :*
+     Set currentTimestamp `as` #postRowUpdateTime) 
     OnConflictDoRaise 
     (Returning $ #postRowId `as` #fromOnly)
 
 createPostElementRowsQ :: Manipulation Schema (TuplePG (PostElementRow Post)) '[]
 createPostElementRowsQ = insertRow_ #postElements 
     (Set (param @1) `as` #rowElementId :*
-    Set (param @2) `as` #rowElementAuthorId :*
-    Set (param @3) `as` #rowElementOrd :*
-    Set (param @4) `as` #rowElementMarkdown :*
-    Set (param @5) `as` #rowElementLatex :*
-    Set (param @6) `as` #rowElementImage :*
-    Set (param @7) `as` #rowElementQuote :*
-    Set (param @8) `as` #rowElementAttachment)
+    Set (param @2) `as` #rowElementOrd :*
+    Set (param @3) `as` #rowElementMarkdown :*
+    Set (param @4) `as` #rowElementLatex :*
+    Set (param @5) `as` #rowElementImage :*
+    Set (param @6) `as` #rowElementQuote :*
+    Set (param @7) `as` #rowElementAttachment)
 
 -- MARK: FrontEnd functions
 

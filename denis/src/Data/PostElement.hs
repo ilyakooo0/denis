@@ -42,20 +42,6 @@ data PostElement a = Markdown Text
     | Quote PostQuote
     | Attachment Text
 
-    
--- data ElementRow a = ElementRow {
---     rowElementId :: Int64, -- the source id
---     rowElementOrd :: Int64,
---     rowElementMarkdown :: Maybe Text,
---     rowElementLatex :: Maybe Text,
---     rowElementImage :: Maybe Text,
---     rowElementQuote :: Maybe Int64,
---     rowElementAttachment :: Maybe Text
--- } deriving (GHC.Generic)
-
--- instance SOP.Generic (ElementRow a)
--- instance SOP.HasDatatypeInfo (ElementRow a)
-
 instance ToJSON (PostElement t) where 
     toJSON (Markdown m) = object ["markdown" .= m]
     toJSON (Latex l) = object ["latex" .= l]

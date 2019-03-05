@@ -16,7 +16,6 @@ import Data.Proxy
 import Servant.API
 import Data.User
 import Server.Auth
-import Data.Int ()
 import Servant.Server
 import Data.Connection
 import Data.Query
@@ -31,6 +30,7 @@ import Control.Lens
 instance HasDocs api => HasDocs (Authentication :> api) where
         docsFor Proxy (endpoint, action) =
             docsFor (Proxy :: Proxy api) (endpoint, action & notes <>~ [DocNote "Authentication" ["This method requires cookies set in the `POST /authenticate` method.\n\nReturns error `401 Unauthorized` if the cookies are invalid or don't premit access to the requested data."]])
+
 
 -- MARK: Implementation
 
@@ -54,7 +54,3 @@ mkServerAPI l =
         mapM (runQnotFound . getUser) :<|>
         postApi uId
         )
-
--- getPostsS :: [UserId] -> App [User]
--- getPostsS = mapM getPost
-
