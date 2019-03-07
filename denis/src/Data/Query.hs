@@ -13,12 +13,14 @@
 module Data.Query (
     Schema,
     createTables,
-    getPost,
+    getPosts,
     getUser,
+    getUsers,
     getLastPosts,
     getPostsForUser,
     Limit,
-    publishPost
+    publishPost,
+    PostResponse(..)
 ) where
 
 import Squeal.PostgreSQL
@@ -29,9 +31,23 @@ import Data.Function (on)
 import Data.Connection
 import Data.PostElement
 import qualified Servant as S
+import Control.Monad
 import Control.Monad.Morph
 import Data.Word (Word64)
 import qualified Data.List as L
+import qualified Data.Map.Strict as M
+import qualified Data.Set as Set
+import Data.Int (Int64)
+import Data.ByteString.Char8 (pack)
+import GHC.Generics (Generic)
+import Data.Aeson
+import Servant.Docs
+import Data.Proxy
+
+-- MARK: Documentation
+
+instance ToSample PostResponse where
+    toSamples _ = samples $ PostResponse <$> (map snd $ toSamples Proxy) <*> [M.fromList $ map (tupleFirst userId . snd) (toSamples Proxy)]
 
 
 -- MARK: Generalized Post Queries
@@ -86,8 +102,20 @@ getPostQ oTe te = select (
 getUserQ :: Query Schema (TuplePG (Only UserId)) (RowPG User)
 getUserQ = selectStar $ from (table #users) & where_ (#userId .== param @1)
 
-getPostByIdQ :: Query Schema (TuplePG (Only PostId)) (RowPG PostRowResponse)
-getPostByIdQ = getPostQ id $ where_ $ #postRowId .== param @1
+getUsersQ :: [UserId] -> Maybe (Query Schema '[] (RowPG User))
+getUsersQ uIds = case idsToColumn uIds of
+    Just idQ -> Just $ selectDotStar #users $ from (subquery (idQ `As` #ids) & 
+        innerJoin (table #users)
+            (#ids ! #id .== #users ! #userId))
+    Nothing -> Nothing
+
+getPostsByIdQ :: [PostId] -> Maybe (Query Schema '[] (RowPG PostRowResponse))
+getPostsByIdQ pIds = case idsToColumn pIds of
+    Just idQ -> Just $ selectDotStar #posts $ from (subquery (idQ `As` #ids) & 
+        innerJoin (subquery $ getPostQ id id `As` #posts)
+            (#ids ! #id .== #posts ! #postRowId))
+    Nothing -> Nothing
+
 
 type Limit = Word64
 
@@ -118,26 +146,43 @@ createPostElementRowsQ = insertRow_ #postElements
     Set (param @6) `as` #rowElementQuote :*
     Set (param @7) `as` #rowElementAttachment)
 
+
+-- MARK: FrontEnd Data Structures
+
+data PostResponse = PostResponse {
+    posts :: [Post],
+    users :: M.Map UserId User
+} deriving (Generic)
+
+instance ToJSON PostResponse
+
+
 -- MARK: FrontEnd functions
 
-getPostsForUser :: Word64 -> UserId -> StaticPQ (Maybe [Post])
+getPostsForUser :: Word64 -> UserId -> StaticPQ (Maybe PostResponse)
 getPostsForUser lim uId = do 
     postRows <- runQueryParams (getLastNPostsForUserQ lim) (Only uId) >>= getRows
-    return . foldMaybe . map rowsToPost . L.groupBy ((==) `on` postRowId) $ postRows    
+    rowsToPosts postRows `liftMaybe` wrapIntoPostResponse
 
-getPost :: PostId -> StaticPQ (Maybe Post)
-getPost pId = do 
-    postRow <- runQueryParams getPostByIdQ (Only pId) >>= getRows
-    return $ rowsToPost postRow
+getPosts :: [PostId] -> StaticPQ (Maybe PostResponse)
+getPosts pId = 
+    case getPostsByIdQ pId of
+        Just psQ -> do
+            postRows <- runQuery psQ >>= getRows
+            rowsToPosts postRows `liftMaybe` wrapIntoPostResponse
+        Nothing -> return Nothing
 
-getLastPosts :: Word64 -> StaticPQ (Maybe [Post])
+getLastPosts :: Word64 -> StaticPQ (Maybe PostResponse)
 getLastPosts n = do 
     postRows <- runQuery (getLastNPostsQ n) >>= getRows
-    return . foldMaybe . map rowsToPost . L.groupBy ((==) `on` postRowId) $ postRows
-
+    rowsToPosts postRows `liftMaybe` wrapIntoPostResponse
+    
 getUser :: UserId -> StaticPQ User
 getUser uId = runQueryParams getUserQ (Only uId) >>= getRow 0
-   
+
+getUsers :: [UserId] -> StaticPQ (Maybe [User])
+getUsers ids = getUsersQ ids `liftMaybe` (fmap Just . (runQuery >=> getRows))
+           
 publishPost :: UserId -> [PostElement Post] -> StaticPQ PostId
 publishPost uId els = transactionally_ $ do
     pId' <- manipulateParams createPostRowQ (Only uId) >>= firstRow
@@ -147,9 +192,38 @@ publishPost uId els = transactionally_ $ do
             return pId
         _ -> lift $ S.throwError S.err404
 
+
 -- MARK: Utils
 
 foldMaybe :: [Maybe a] -> Maybe [a]
 foldMaybe [] = Just []
 foldMaybe (Nothing : _) = Nothing
 foldMaybe (Just x : xs) = (x :) <$> foldMaybe xs
+
+userIdsFromPostResponse :: [Post] -> [UserId]
+userIdsFromPostResponse = Set.toList . Set.fromList . map postAuthorId
+
+rowsToPosts :: [PostRowResponse] -> Maybe [Post]
+rowsToPosts = foldMaybe . map rowsToPost . L.groupBy ((==) `on` postRowId)
+
+tupleFirst :: (a -> b) -> a -> (b, a)
+tupleFirst f a = (f a, a)
+
+mapFirstBy :: (a -> b) -> [a] -> [(b, a)]
+mapFirstBy f = map $ tupleFirst f
+
+idsToColumn :: [Int64] -> Maybe (Query schema params '["id" ::: 'NotNull 'PGint8])
+idsToColumn [] = Nothing
+idsToColumn (i:ii) = Just $ values (unsafeIntToExpr i `as` #id) $ map ((`as` #id) . unsafeIntToExpr) ii
+
+unsafeIntToExpr :: Int64 -> Expression schema from grouping params ty
+unsafeIntToExpr = UnsafeExpression . pack . show
+
+wrapIntoPostResponse :: [Post] -> StaticPQ (Maybe PostResponse)
+wrapIntoPostResponse ps = do
+        pUsers <- getUsers $ userIdsFromPostResponse ps
+        return $ PostResponse ps . M.fromList . mapFirstBy userId <$> pUsers 
+
+liftMaybe :: Applicative f => Maybe a -> (a -> f (Maybe b)) -> f (Maybe b)
+liftMaybe Nothing _ = pure Nothing
+liftMaybe (Just a) f = f a

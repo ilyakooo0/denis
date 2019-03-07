@@ -25,6 +25,7 @@ import Server.Logger
 import Servant.Docs (HasDocs, docsFor, notes, DocNote(DocNote))
 import Control.Lens
 
+
 -- MARK: Documentation
 
 instance HasDocs api => HasDocs (Authentication :> api) where
@@ -51,6 +52,6 @@ mkServerAPI :: Logger -> ServerT API App
 mkServerAPI l = 
         l :<|> 
         authenticate :<|> (\uId -> 
-        mapM (runQnotFound . getUser) :<|>
+        maybeNotFound . runQnotFound . getUsers :<|>
         postApi uId
         )

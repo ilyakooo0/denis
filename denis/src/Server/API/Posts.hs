@@ -42,27 +42,21 @@ instance FromJSON UserPostsRequest where
     parseJSON = withObject "User posts request" $ \e -> 
         UserPostsRequest <$> e .: "userId" <*> e.: "limit"
 
-type PostApi = ReqBody '[JSON] [P.PostId] :> Post '[JSON] [P.Post] :<|>
-    "last" :> ReqBody '[JSON] Word64 :> Post '[JSON] [P.Post] :<|>
-    "forUser" :> ReqBody '[JSON] UserPostsRequest :> Post '[JSON] [P.Post] :<|>
-    "publish" :> ReqBody '[JSON] [P.PostElement P.Post] :> Post '[JSON] P.PostId
-
-maybeNotFound :: App (Maybe a) -> App a
-maybeNotFound = (>>= (\t -> case t of
-    Just y -> return y
-    Nothing -> throwError err404))
-    
+type PostApi = ReqBody '[JSON] [P.PostId] :> Post '[JSON] PostResponse :<|>
+    "last" :> ReqBody '[JSON] Word64 :> Post '[JSON] PostResponse :<|>
+    "forUser" :> ReqBody '[JSON] UserPostsRequest :> Post '[JSON] PostResponse :<|>
+    "publish" :> ReqBody '[JSON] [P.PostElement P.Post] :> Post '[JSON] P.PostId    
     
 postApi :: UserId -> ServerT PostApi App
-postApi uId = getPosts :<|> lastPosts :<|> getPostsForUserApi :<|> publishPostApi uId
+postApi uId = getPostsApi :<|> lastPosts :<|> getPostsForUserApi :<|> publishPostApi uId
 
-getPosts :: [P.PostId] -> App [P.Post]
-getPosts = mapM (maybeNotFound . runQnotFound . getPost) 
+getPostsApi :: [P.PostId] -> App PostResponse
+getPostsApi = maybeNotFound . runQnotFound . getPosts 
 
-lastPosts :: Word64 -> App [P.Post]
+lastPosts :: Word64 -> App PostResponse
 lastPosts = maybeNotFound . runQnotFound . getLastPosts
 
-getPostsForUserApi :: UserPostsRequest -> App [P.Post]
+getPostsForUserApi :: UserPostsRequest -> App PostResponse
 getPostsForUserApi (UserPostsRequest uId lim) = maybeNotFound . runQnotFound $ getPostsForUser lim uId
 
 publishPostApi :: UserId -> [P.PostElement P.Post] -> App P.PostId

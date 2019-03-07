@@ -12,7 +12,8 @@ module Data.Connection (
     runQ,
     runQ',
     runQnotFound,
-    runQerror
+    runQerror,
+    maybeNotFound
 ) where
 
 import Squeal.PostgreSQL
@@ -37,3 +38,8 @@ runQnotFound = runQ err404
 
 runQerror :: StaticPQ a -> App a
 runQerror = runQ err500
+
+maybeNotFound :: App (Maybe a) -> App a
+maybeNotFound = (>>= (\t -> case t of
+    Just y -> return y
+    Nothing -> throwError err404))
