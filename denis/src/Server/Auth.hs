@@ -14,9 +14,10 @@ module Server.Auth (
     cookieTokenKey,
     genAuthServerContext,
     AuthenticationHandler,
-    authenticate,
+    logIn,
     contextProxy,
-    AuthenticationCredits(..)
+    AuthenticationCredits(..),
+    authenticationAPI
 ) where
 
 import Server.App
@@ -35,6 +36,7 @@ import Network.Wai (Request, requestHeaders)
 import Servant.Server
 import Web.Cookie
 import Data.Time.Clock
+import Data.Time.Calendar
 import Data.Proxy
 import qualified GHC.Generics as GHC
 import Data.Aeson
@@ -48,27 +50,41 @@ instance ToSample AuthenticationCredits where
             
 -- MARK: Implementation
 
-type AuthenticationHandler = ReqBody '[JSON] AuthenticationCredits :> PostNoContent '[JSON, PlainText, FormUrlEncoded] (Headers '[Header "Set-Cookie" String] NoContent)
+type AuthenticationHandler = 
+    "login" :> 
+        ReqBody '[JSON] AuthenticationCredits :> 
+        Post '[JSON] (Headers '[Header "Set-Cookie" String] UserId) :<|>
+    "logout" :> 
+        PostNoContent '[JSON, PlainText, FormUrlEncoded] (Headers '[Header "Set-Cookie" String] NoContent)
 
-data AuthenticationCredits = AuthenticationCredits {authenticationId :: UserId}
+newtype AuthenticationCredits = AuthenticationCredits {authenticationId :: UserId}
     deriving GHC.Generic
 
 instance ToJSON AuthenticationCredits
 instance FromJSON AuthenticationCredits
 
-authenticate :: ServerT AuthenticationHandler App
-authenticate (AuthenticationCredits uId) = do
+authenticationAPI :: ServerT AuthenticationHandler App
+authenticationAPI = logIn :<|> logOut
+
+logIn :: AuthenticationCredits -> App (Headers '[Header "Set-Cookie" String] UserId)
+logIn (AuthenticationCredits uId) = do
     expire <- liftIO $ fmap (addUTCTime (1 * 24 * 60 * 60)) getCurrentTime -- one days
-    tId <- fmap userId . runQ invalidToken . getUser $ uId
+    tId <- fmap userId . runQ err404 . getUser $ uId
     let cookie = defaultSetCookie { 
         setCookieName = cookieTokenKey, 
         setCookieValue = C.pack $ show tId, 
         setCookieExpires = Just expire, 
-        -- setCookieDomain = Just "127.0.0.1", 
         setCookiePath = Just "/" }
-    -- let token = cookieTokenKeyString <> "=" <> show tId <> "; Expires=" <> show expire <> "; Domain=127.0.0.1:2000; Path=/" -- ; Secure" --; HttpOnly"
-    return $ addHeader (L.unpack . toLazyByteString . renderSetCookie $ cookie) NoContent 
+    return $ addHeader (L.unpack . toLazyByteString . renderSetCookie $ cookie) tId 
 
+logOut :: App (Headers '[Header "Set-Cookie" String] NoContent)
+logOut =   
+    let cookie = defaultSetCookie { 
+        setCookieName = cookieTokenKey, 
+        setCookieValue = "invalid", 
+        setCookieExpires = Just (UTCTime (ModifiedJulianDay 0) 0), 
+        setCookiePath = Just "/" }
+    in return $ addHeader (L.unpack . toLazyByteString . renderSetCookie $ cookie) NoContent 
 
 checkToken :: DBConnection -> BS.ByteString -> Handler UserId
 checkToken conn token = do
@@ -80,11 +96,11 @@ checkToken conn token = do
 authHandler :: DBConnection -> AuthHandler Request UserId
 authHandler conn = mkAuthHandler handler
     where
-        maybeToEither e = maybe (Left e) Right
-        throw401 msg = throwError $ err401 { errBody = msg }
-        handler req = either throw401 (checkToken conn) $ do
-            cookie <- maybeToEither "Missing cookie header" $ lookup "cookie" $ requestHeaders req
-            maybeToEither "Missing token in cookie" $ lookup cookieTokenKey $ parseCookies cookie
+        maybeToEither = maybe (Left ()) Right
+        throw = const $ throwError invalidToken
+        handler req = either throw (checkToken conn) $ do
+            cookie <- maybeToEither $ lookup "cookie" $ requestHeaders req
+            maybeToEither $ lookup cookieTokenKey $ parseCookies cookie
 
 cookieTokenKey :: BS.ByteString
 cookieTokenKey = "servant-auth-cookie"

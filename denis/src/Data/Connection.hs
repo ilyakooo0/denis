@@ -13,7 +13,8 @@ module Data.Connection (
     runQ',
     runQnotFound,
     runQerror,
-    maybeNotFound
+    maybeNotFound,
+    maybeInvalidToken
 ) where
 
 import Squeal.PostgreSQL
@@ -23,6 +24,7 @@ import Server.App
 import Control.Monad.Reader
 import Control.Monad.Except
 import Servant.Server
+import Server.Error
 
 type StaticPQ = PoolPQ Schema Handler
 
@@ -43,3 +45,9 @@ maybeNotFound :: App (Maybe a) -> App a
 maybeNotFound = (>>= (\t -> case t of
     Just y -> return y
     Nothing -> throwError err404))
+
+maybeInvalidToken :: App (Maybe a) -> App a
+maybeInvalidToken = (>>= (\t -> case t of
+    Just y -> return y
+    Nothing -> throwError invalidToken))
+    

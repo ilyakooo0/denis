@@ -20,7 +20,6 @@ import Servant.Server
 import Data.Query
 import Data.User
 import Data.Connection
-import Servant
 import Data.Word (Word64)
 import Servant.Docs (ToSample, toSamples, samples)
     

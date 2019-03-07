@@ -6,8 +6,6 @@
 
 import Server.API
 import Servant.Docs
-import Servant.API
-import Data.Post
 import qualified Data.Text as T
 import Servant.Server
 import Servant
@@ -20,13 +18,16 @@ import Data.Int (Int64)
 import Data.Word (Word64)
 import Server.API.Posts
 import Server.Logger
+import Server.Auth
 
 docsWriter :: HasDocs api => String -> Proxy api -> IO ()
-docsWriter file = writeFile ("docs/" ++ file ++ ".md") . markdown . docs 
+docsWriter file = writeFile ("docs/" ++ file ++ ".md") . normalizer . markdown . docs 
 
 main = do
     docsWriter "posts" (Proxy :: Proxy ("posts" :> PostApi))
     docsWriter "all" serverProxy
+    docsWriter "authentication" (Proxy :: Proxy ("authentication" :> AuthenticationHandler :<|>
+        Authentication :> "authentication" :> "me" :> Post '[JSON] UserId )) 
 
 instance ToSample Char where
     toSamples _ = singleSample 'c'
@@ -39,3 +40,8 @@ instance ToSample Word64 where
                     
 instance ToSample Log where
     toSamples _ = noSamples
+
+normalizer :: String -> String
+normalizer (' ':' ':' ':' ':'`':'`':'`':xs) = "```" ++ normalizer xs
+normalizer (x:xs) = x : normalizer xs
+normalizer "" = ""

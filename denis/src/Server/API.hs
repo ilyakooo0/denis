@@ -9,7 +9,8 @@
 module Server.API (
         API,
         serverProxy,
-        mkServerAPI
+        mkServerAPI,
+        Authentication
 ) where 
     
 import Data.Proxy
@@ -30,7 +31,7 @@ import Control.Lens
 
 instance HasDocs api => HasDocs (Authentication :> api) where
         docsFor Proxy (endpoint, action) =
-            docsFor (Proxy :: Proxy api) (endpoint, action & notes <>~ [DocNote "Authentication" ["This method requires cookies set in the `POST /authenticate` method.\n\nReturns error `401 Unauthorized` if the cookies are invalid or don't premit access to the requested data."]])
+            docsFor (Proxy :: Proxy api) (endpoint, action & notes <>~ [DocNote "Authentication" ["This method requires cookies set in the `POST /authenticate` method.\n\nReturns error `498 Invalid Token` if the token is invalid or the token header is missing. Returns `401 Unathorized` if the token doesn't premit access to the requested data."]])
 
 
 -- MARK: Implementation
@@ -39,8 +40,9 @@ type Authentication = AuthProtect "basicAuth"
 
 type API = 
         LoggerAPI :<|>
-        "authenticate" :> AuthenticationHandler :<|>
-            Authentication :> (
+        "authentication" :> AuthenticationHandler :<|>
+        Authentication :> (
+            "authentication" :> "me" :> Post '[JSON] UserId :<|>
             "users" :> ReqBody '[JSON] [UserId] :> Post '[JSON] [User] :<|>
             "posts" :> PostApi
             )
@@ -51,7 +53,8 @@ serverProxy = Proxy
 mkServerAPI :: Logger -> ServerT API App
 mkServerAPI l = 
         l :<|> 
-        authenticate :<|> (\uId -> 
+        authenticationAPI :<|> (\uId -> 
+        return uId :<|>
         maybeNotFound . runQnotFound . getUsers :<|>
         postApi uId
         )
