@@ -23,7 +23,8 @@ type Schema =
             '[
                 "userId" ::: 'Def :=> 'NotNull 'PGint8,
                 "firstName" ::: 'NoDef :=> 'NotNull 'PGtext,
-                "secondName" ::: 'NoDef :=> 'NotNull 'PGtext
+                "middleName" ::: 'NoDef :=> 'NotNull 'PGtext,
+                "lastName" ::: 'NoDef :=> 'NotNull 'PGtext
             ]),
         "posts" ::: 'Table ( '[
             "pk_posts" ::: 'PrimaryKey '["postRowId"],
@@ -93,7 +94,8 @@ createTables :: Definition '[] Schema
 createTables = createTable #users (
         serial8 `as` #userId :* 
         notNullable text `as` #firstName :*
-        notNullable text `as` #secondName
+        notNullable text `as` #middleName :*
+        notNullable text `as` #lastName
         ) (
         primaryKey #userId `as` #pk_users
     ) >>> createTable #posts (

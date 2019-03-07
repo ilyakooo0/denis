@@ -22,7 +22,7 @@ import Servant.Docs (ToSample, toSamples, samples)
 -- MARK: Documentation
 
 instance ToSample User where
-    toSamples _ = samples [User 8 "Vasya" "Pupkin", User 69 "Seva" "Leonidov"]
+    toSamples _ = samples [User 8 "Vasya" "Pupkinovuch" "Pupkin", User 69 "Seva" "Algebrovich" "Leonidov"]
 
 -- MARK: Implementation
 
@@ -31,7 +31,8 @@ type UserId = Int64
 data User = User {
     userId :: UserId,
     firstName :: Text,
-    secondName :: Text
+    middleName :: Text,
+    lastName :: Text
 } deriving (GHC.Generic)
 
 instance SOP.Generic User
@@ -39,8 +40,9 @@ instance SOP.Generic User
 instance SOP.HasDatatypeInfo User
 
 instance ToJSON User where
-    toJSON (User uId fName sName) = object [
+    toJSON (User uId fName mName lName) = object [
         "id" .= uId,
         "firstName" .= fName,
-        "secondName" .= sName
+        "middleName" .= mName,
+        "lastName" .= lName
         ]
