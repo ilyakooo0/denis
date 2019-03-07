@@ -21,10 +21,15 @@ import Data.Word (Word64)
 import Server.API.Posts
 import Server.Logger
 
-main = writeFile "docs.md" . markdown . docs . pretty $ serverProxy 
+docsWriter :: HasDocs api => String -> Proxy api -> IO ()
+docsWriter file = writeFile ("docs/" ++ file ++ ".md") . markdown . docs 
+
+main = do
+    docsWriter "posts" (Proxy :: Proxy ("posts" :> PostApi))
+    docsWriter "all" serverProxy
 
 instance ToSample Char where
-    toSamples _ = singleSample $ 'c'
+    toSamples _ = singleSample 'c'
     
 instance ToSample Int64 where
     toSamples _ = samples [1, 7, 2, 19]
@@ -33,4 +38,4 @@ instance ToSample Word64 where
     toSamples _ = samples [1, 7, 2, 19]
                     
 instance ToSample Log where
-    toSamples _ = samples ["Log"]
+    toSamples _ = noSamples
