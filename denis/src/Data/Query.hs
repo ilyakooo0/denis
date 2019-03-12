@@ -25,7 +25,8 @@ module Data.Query (
     updateChannel,
     createNewChannel,
     getAllChannels,
-    getAnonymousChannelPosts
+    getAnonymousChannelPosts,
+    deleteNamedChannel
 ) where
 
 import Squeal.PostgreSQL
@@ -183,6 +184,9 @@ createNamedChannelQ = insertRow #channels
     OnConflictDoRaise
     (Returning $ #namedChannelFullId `as` #fromOnly)
 
+deleteNamedChannelQ :: Manipulation Schema (TuplePG (Only NamedChannelId)) '[]
+deleteNamedChannelQ = deleteFrom_ #channels (#namedChannelFullId .== param @1)
+
 updateNamedChannelQ :: Manipulation Schema (TuplePG NamedChannelFull) '[]
 updateNamedChannelQ = update_ #channels
     (
@@ -317,6 +321,12 @@ getAnonymousChannelPosts lim (AnonymousChannel tags people) = do
 getAllChannels :: UserId -> StaticPQ [NamedChannel UserId]
 getAllChannels uId = fmap (map removeUserFromChannel) $ 
     runQueryParams getAllChannelsForUserQ (Only uId) >>= getRows
+
+deleteNamedChannel :: UserId -> NamedChannelId -> StaticPQ ()
+deleteNamedChannel uId cId = transactionally_ $ do
+    _ <- getChannelForUser uId cId
+    _ <- manipulateParams deleteNamedChannelQ (Only cId)
+    return ()
 
     
 -- MARK: Utils

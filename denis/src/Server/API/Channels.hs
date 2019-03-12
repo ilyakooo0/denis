@@ -33,10 +33,11 @@ type ChannelsApi = Post '[JSON] [NamedChannel UserId] :<|>
     "get" :> ReqBody '[JSON] NamedChannelRequest :> Post '[JSON] PostResponse :<|>
     "getAnonymous" :> ReqBody '[JSON] (LimitingRequest AnonymousChannel) :> Post '[JSON] PostResponse :<|>
     "create" :> ReqBody '[JSON] NamedChannelCreationRequest :> Post '[JSON] NamedChannelId :<|>
-    "update" :> ReqBody '[JSON] (NamedChannel UserId) :> PostNoContent '[JSON, FormUrlEncoded, PlainText] NoContent
+    "update" :> ReqBody '[JSON] (NamedChannel UserId) :> PostNoContent '[JSON, FormUrlEncoded, PlainText] NoContent :<|>
+    "delete" :> ReqBody '[JSON] NamedChannelId :> PostNoContent '[JSON, FormUrlEncoded, PlainText] NoContent
 
 channelsApi :: UserId -> ServerT ChannelsApi App
-channelsApi uId = getChannelsApi uId :<|> getChannel uId :<|> getAnonymousChannelsApi :<|> createChannelApi uId :<|> updateChannelApi uId
+channelsApi uId = getChannelsApi uId :<|> getChannel uId :<|> getAnonymousChannelsApi :<|> createChannelApi uId :<|> updateChannelApi uId :<|> deleteChannelApi uId
 
 
 getChannelsApi :: UserId -> App [NamedChannel UserId]
@@ -54,4 +55,9 @@ createChannelApi uId req = maybeNotFound . runQnotFound $ createNewChannel uId r
 updateChannelApi :: UserId -> NamedChannel UserId -> App NoContent
 updateChannelApi uId req = do
     runQnotFound $ updateChannel uId req
+    return NoContent
+
+deleteChannelApi :: UserId -> NamedChannelId -> App NoContent
+deleteChannelApi uId cId = do 
+    runQnotFound $ deleteNamedChannel uId cId
     return NoContent
