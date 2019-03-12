@@ -24,6 +24,7 @@ import Server.App
 import Server.API.Posts
 import Server.Logger
 import Servant.Docs (HasDocs, docsFor, notes, DocNote(DocNote))
+import Server.API.Channels
 import Control.Lens
 
 
@@ -44,7 +45,8 @@ type API =
         Authentication :> (
             "authentication" :> "me" :> Post '[JSON] UserId :<|>
             "users" :> ReqBody '[JSON] [UserId] :> Post '[JSON] [User] :<|>
-            "posts" :> PostApi
+            "posts" :> PostApi :<|>
+            "channels" :> ChannelsApi
             )
 
 serverProxy :: Proxy API
@@ -56,5 +58,6 @@ mkServerAPI l =
         authenticationAPI :<|> (\uId -> 
         return uId :<|>
         maybeNotFound . runQnotFound . getUsers :<|>
-        postApi uId
+        postApi uId :<|>
+        channelsApi uId
         )

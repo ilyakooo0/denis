@@ -32,7 +32,8 @@ type Schema =
             '[
                 "postRowId" ::: 'Def :=> 'NotNull 'PGint8,
                 "postRowAuthorId" ::: 'NoDef :=> 'NotNull 'PGint8,
-                "postRowUpdateTime" ::: 'NoDef :=> 'NotNull 'PGtimestamptz
+                "postRowUpdateTime" ::: 'NoDef :=> 'NotNull 'PGtimestamptz,
+                "postRowTags" ::: 'NoDef :=> 'NotNull ('PGvararray ('NotNull 'PGtext))
             ]),
         "quotes" ::: 'Table (
             '[                
@@ -73,7 +74,20 @@ type Schema =
                 "rowElementImage" ::: 'NoDef :=> 'Null 'PGtext,
                 "rowElementQuote" ::: 'NoDef :=> 'Null 'PGint8,                
                 "rowElementAttachment" ::: 'NoDef :=> 'Null 'PGtext
-            -- ]),
+            ]),
+        "channels" ::: 'Table (
+            '[ 
+                "pk_channels" ::: 'PrimaryKey '["namedChannelFullId"], 
+                "fk_channels_users_id" ::: 'ForeignKey '["namedChannelFullOwner"] "users" '["userId"] 
+            ] :=> 
+            '[
+                "namedChannelFullId" ::: 'Def :=> 'NotNull 'PGint8,
+                "namedChannelFullOwner" ::: 'NoDef :=> 'NotNull 'PGint8,
+                "namedChannelFullName" ::: 'NoDef :=> 'NotNull 'PGtext,
+                "namedChannelFullTags" ::: 'NoDef :=> 'NotNull ('PGvararray ('NotNull 'PGtext)),
+                "namedChannelFullPeopleIds" ::: 'NoDef :=> 'NotNull ('PGvararray ('NotNull 'PGint8))
+            ]
+        )
         -- "postsView" ::: 'View (RowPG PostRowResponse)
             -- ('[
             --     "postRowId" ::: 'NotNull 'PGint8,
@@ -85,7 +99,7 @@ type Schema =
             --     "rowElementImage" ::: 'Null 'PGtext,
             --     "rowElementQuote" ::: 'Null 'PGint8,    
             --     "rowElementAttachment" ::: 'Null 'PGtext
-            ])
+            -- ])
             
     ]
     
@@ -101,7 +115,8 @@ createTables = createTable #users (
     ) >>> createTable #posts (
         serial8 `as` #postRowId :*
         notNullable int8 `as` #postRowAuthorId :*
-        notNullable timestampWithTimeZone `as` #postRowUpdateTime
+        notNullable timestampWithTimeZone `as` #postRowUpdateTime :*
+        notNullable (vararray text) `as` #postRowTags
         ) (
             primaryKey #postRowId `as` #pk_posts :*
             foreignKey #postRowAuthorId #users #userId OnDeleteCascade OnUpdateCascade `as` #fk_author_id 
@@ -133,6 +148,15 @@ createTables = createTable #users (
         ) (
             foreignKey #rowElementId #quotes #quoteRowId OnDeleteCascade OnUpdateCascade `as` #fk_quotes_quote_self_id :*
             foreignKey #rowElementQuote #quotes #quoteRowId OnDeleteCascade OnUpdateCascade `as` #fk_quote_quote_id 
+    ) >>> createTable #channels (
+        serial8 `as` #namedChannelFullId :*
+        notNullable int8 `as` #namedChannelFullOwner :*
+        notNullable text `as` #namedChannelFullName :*
+        notNullable (vararray text) `as` #namedChannelFullTags :*
+        notNullable (vararray int8) `as` #namedChannelFullPeopleIds
+        ) (
+            primaryKey #namedChannelFullId `as` #pk_channels :*
+            foreignKey #namedChannelFullOwner #users #userId OnDeleteCascade OnUpdateCascade `as` #fk_channels_users_id 
     -- ) >>> createView #postsView (select (
     --     #posts ! #postRowId :*
     --     #posts ! #postRowAuthorId :*

@@ -20,7 +20,12 @@ module Data.Query (
     getPostsForUser,
     Limit,
     publishPost,
-    PostResponse(..)
+    PostResponse(..),
+    getChannelPosts,
+    updateChannel,
+    createNewChannel,
+    getAllChannels,
+    getAnonymousChannelPosts
 ) where
 
 import Squeal.PostgreSQL
@@ -37,12 +42,20 @@ import Data.Word (Word64)
 import qualified Data.List as L
 import qualified Data.Map.Strict as M
 import qualified Data.Set as Set
+import qualified Generics.SOP as SOP
+import qualified GHC.Generics as GHC
 import Data.Int (Int64)
 import Data.ByteString.Char8 (pack)
 import GHC.Generics (Generic)
 import Data.Aeson
 import Servant.Docs
 import Data.Proxy
+import Data.Vector (Vector, toList)
+import Data.Text (Text)
+import Data.Channel.NamedChannel
+import Data.Channel.AnonymousChannel
+import Data.Maybe (fromMaybe)
+import Data.Monoid (mempty)
 
 -- MARK: Documentation
 
@@ -68,6 +81,7 @@ getPostQ oTe te = select (
     #posts ! #postRowId :*
     #posts ! #postRowAuthorId :*
     #posts ! #postRowUpdateTime :*
+    #posts ! #postRowTags :*
     --  #rowElementId :*
     #postElements ! #rowElementOrd :*
     #postElements ! #rowElementMarkdown :*
@@ -128,11 +142,12 @@ getLastNPostsForUserQ lim = getPostQ
     (limit lim . orderBy [#posts ! #postRowUpdateTime & Desc]) 
     (where_ $ #postRowAuthorId .== param @1)
     
-createPostRowQ :: Manipulation Schema (TuplePG (Only UserId)) (RowPG (Only PostId))
+createPostRowQ :: Manipulation Schema (TuplePG (UserId, Vector Text)) (RowPG (Only PostId))
 createPostRowQ = insertRow #posts 
     (Default `as` #postRowId :*
      Set (param @1) `as` #postRowAuthorId :*
-     Set currentTimestamp `as` #postRowUpdateTime) 
+     Set currentTimestamp `as` #postRowUpdateTime :*
+     Set (param @2) `as` #postRowTags) 
     OnConflictDoRaise 
     (Returning $ #postRowId `as` #fromOnly)
 
@@ -146,6 +161,52 @@ createPostElementRowsQ = insertRow_ #postElements
     Set (param @6) `as` #rowElementQuote :*
     Set (param @7) `as` #rowElementAttachment)
 
+getChannelForUserQ :: Query Schema (TuplePG (UserId, NamedChannelId)) (RowPG NamedChannelFull)
+getChannelForUserQ = selectStar $ 
+    from (table #channels) &
+    where_ (#namedChannelFullOwner .== param @1 .&& #namedChannelFullId .== param @2)
+
+getAllChannelsForUserQ :: Query Schema (TuplePG (Only UserId)) (RowPG NamedChannelFull)
+getAllChannelsForUserQ = selectStar $
+    from (table #channels) &
+    where_ (#namedChannelFullOwner .== param @1)
+
+createNamedChannelQ :: Manipulation Schema (TuplePG NamedChannelCreation) (RowPG (Only NamedChannelId))
+createNamedChannelQ = insertRow #channels
+    (
+        Default `as` #namedChannelFullId :*
+        Set (param @1) `as` #namedChannelFullOwner :*
+        Set (param @2) `as` #namedChannelFullName :*
+        Set (param @3) `as` #namedChannelFullTags :*
+        Set (param @4) `as` #namedChannelFullPeopleIds
+    ) 
+    OnConflictDoRaise
+    (Returning $ #namedChannelFullId `as` #fromOnly)
+
+updateNamedChannelQ :: Manipulation Schema (TuplePG NamedChannelFull) '[]
+updateNamedChannelQ = update_ #channels
+    (
+        Same `as` #namedChannelFullId :*
+        Same `as` #namedChannelFullOwner :*
+        Set (param @3) `as` #namedChannelFullName :*
+        Set (param @4) `as` #namedChannelFullTags :*
+        Set (param @5) `as` #namedChannelFullPeopleIds
+    ) 
+    (#namedChannelFullOwner .== param @2 .&& #namedChannelFullId .== param @2)
+    
+
+getChannelPostsQ :: Limit -> [UserId] -> Vector Text -> Query Schema '[] (RowPG PostRowResponse)
+getChannelPostsQ lim uIds tags = selectStar $ from (subquery $ postsQ' `As` #bar) & 
+    orderBy [#postRowUpdateTime & Desc] & limit lim
+    where 
+        unionWithUsers = case idsToColumn uIds of
+            Just uIdsQ -> selectDotStar #posts' (from $ subquery (uIdsQ `As` #uIds) & 
+                    innerJoin (subquery $ getPostQ id id `As` #posts')
+                        (#uIds ! #id .== #posts' ! #postRowAuthorId)) &
+                    union
+            Nothing -> id
+        postsQ' = unionWithUsers $ getPostQ id $ where_ $ jsonbLit tags .?| #postRowTags
+        
 
 -- MARK: FrontEnd Data Structures
 
@@ -155,6 +216,44 @@ data PostResponse = PostResponse {
 } deriving (Generic)
 
 instance ToJSON PostResponse
+
+data NamedChannelCreation = NamedChannelCreation {
+    namedChannelCreationOwner :: UserId,
+    namedChannelCreationName :: Text,
+    namedChannelCreationTags :: Vector Text,
+    namedChannelCreationPeopleIds :: Vector UserId
+} deriving GHC.Generic
+
+instance SOP.Generic NamedChannelCreation
+instance SOP.HasDatatypeInfo NamedChannelCreation
+
+addUserToChannelCreate :: UserId -> NamedChannelCreationRequest -> NamedChannelCreation
+addUserToChannelCreate uId (NamedChannelCreationRequest cName cTags cPeople) = NamedChannelCreation uId cName cTags cPeople
+
+
+data NamedChannelFull = NamedChannelFull {
+    namedChannelFullId :: NamedChannelId,
+    namedChannelFullOwner :: UserId,
+    namedChannelFullName :: Text,
+    namedChannelFullTags :: Vector Text,
+    namedChannelFullPeopleIds :: Vector UserId
+} deriving GHC.Generic
+
+instance SOP.Generic NamedChannelFull
+instance SOP.HasDatatypeInfo NamedChannelFull
+
+addUserToChannelUpdate :: UserId -> NamedChannel UserId -> NamedChannelFull
+addUserToChannelUpdate uId (NamedChannel cId cName cTags cPeople) = NamedChannelFull cId uId cName cTags cPeople
+
+removeUserFromChannel :: NamedChannelFull -> NamedChannel UserId
+removeUserFromChannel (NamedChannelFull cId _ cName cTags cPeople) = NamedChannel cId cName cTags cPeople
+
+getChannelForUser :: UserId -> NamedChannelId -> StaticPQ NamedChannelFull
+getChannelForUser uId cId = do
+    channel <- runQueryParams getChannelForUserQ (uId, cId) >>= firstRow
+    case (channel :: Maybe NamedChannelFull) of
+        (Just c) -> return c
+        Nothing -> lift $ S.throwError S.err404
 
 
 -- MARK: FrontEnd functions
@@ -183,16 +282,43 @@ getUser uId = runQueryParams getUserQ (Only uId) >>= getRow 0
 getUsers :: [UserId] -> StaticPQ (Maybe [User])
 getUsers ids = getUsersQ ids `liftMaybe` (fmap Just . (runQuery >=> getRows))
            
-publishPost :: UserId -> [PostElement Post] -> StaticPQ PostId
-publishPost uId els = transactionally_ $ do
-    pId' <- manipulateParams createPostRowQ (Only uId) >>= firstRow
+publishPost :: UserId -> PostCreation -> StaticPQ PostId
+publishPost uId pc  = transactionally_ $ do
+    pId' <- manipulateParams createPostRowQ (uId, postCreationTags pc) >>= firstRow
     case pId' of
         (Just (Only pId)) -> do
-            traversePrepared_ createPostElementRowsQ $ elementsToRows pId els
+            traversePrepared_ createPostElementRowsQ $ elementsToRows pId (postCreationBody pc)
             return pId
         _ -> lift $ S.throwError S.err404
 
+createNewChannel :: UserId -> NamedChannelCreationRequest -> StaticPQ (Maybe NamedChannelId)
+createNewChannel uId req = transactionally_ $ do
+    cId <- manipulateParams createNamedChannelQ (addUserToChannelCreate uId req) >>= firstRow
+    return $ fmap fromOnly cId
 
+updateChannel :: UserId -> NamedChannel UserId -> StaticPQ ()
+updateChannel uId req = transactionally_ $ do
+    _ <- getChannelForUser uId $ namedChannelId req
+    _ <- manipulateParams updateNamedChannelQ $ addUserToChannelUpdate uId req
+    return ()
+
+getChannelPosts :: UserId -> Limit -> NamedChannelId -> StaticPQ PostResponse
+getChannelPosts uId lim cId = do
+    channel <- getChannelForUser uId cId
+    postRows <- runQuery (getChannelPostsQ lim (toList $ namedChannelFullPeopleIds channel) (namedChannelFullTags channel)) 
+        >>= getRows
+    fmap (fromMaybe $ PostResponse mempty mempty) $ rowsToPosts postRows `liftMaybe` wrapIntoPostResponse
+
+getAnonymousChannelPosts :: Limit -> AnonymousChannel -> StaticPQ PostResponse
+getAnonymousChannelPosts lim (AnonymousChannel tags people) = do
+    postRows <- runQuery (getChannelPostsQ lim people tags) >>= getRows
+    fmap (fromMaybe $ PostResponse mempty mempty) $ rowsToPosts postRows `liftMaybe` wrapIntoPostResponse
+
+getAllChannels :: UserId -> StaticPQ [NamedChannel UserId]
+getAllChannels uId = fmap (map removeUserFromChannel) $ 
+    runQueryParams getAllChannelsForUserQ (Only uId) >>= getRows
+
+    
 -- MARK: Utils
 
 foldMaybe :: [Maybe a] -> Maybe [a]

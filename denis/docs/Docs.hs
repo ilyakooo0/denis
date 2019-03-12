@@ -19,15 +19,19 @@ import Data.Word (Word64)
 import Server.API.Posts
 import Server.Logger
 import Server.Auth
+import Server.API.Channels
+import Data.Aeson
 
 docsWriter :: HasDocs api => String -> Proxy api -> IO ()
 docsWriter file = writeFile ("docs/" ++ file ++ ".md") . normalizer . markdown . docs 
 
 main = do
-    docsWriter "posts" (Proxy :: Proxy ("posts" :> PostApi))
-    docsWriter "all" serverProxy
-    docsWriter "authentication" (Proxy :: Proxy ("authentication" :> AuthenticationHandler :<|>
+    docsWriter "posts" $ pretty (Proxy :: Proxy ("posts" :> PostApi))
+    docsWriter "all" $ pretty serverProxy
+    docsWriter "authentication" $ pretty (Proxy :: Proxy ("authentication" :> AuthenticationHandler :<|>
         Authentication :> "authentication" :> "me" :> Post '[JSON] UserId )) 
+    docsWriter "channels" $ pretty (Proxy :: Proxy ("channels" :> ChannelsApi))
+
 
 instance ToSample Char where
     toSamples _ = singleSample 'c'
