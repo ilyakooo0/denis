@@ -174,7 +174,8 @@ getChannelForUserQ = selectStar $
 getAllChannelsForUserQ :: Query Schema (TuplePG (Only UserId)) (RowPG NamedChannelFull)
 getAllChannelsForUserQ = selectStar $
     from (table #channels) &
-    where_ (#namedChannelFullOwner .== param @1)
+    where_ (#namedChannelFullOwner .== param @1) &
+    orderBy [#namedChannelFullId & Desc]
 
 createNamedChannelQ :: Manipulation Schema (TuplePG NamedChannelCreation) (RowPG (Only NamedChannelId))
 createNamedChannelQ = insertRow #channels
