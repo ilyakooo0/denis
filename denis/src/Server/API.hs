@@ -45,6 +45,7 @@ type API =
         Authentication :> (
             "authentication" :> "me" :> Post '[JSON] UserId :<|>
             "users" :> ReqBody '[JSON] [UserId] :> Post '[JSON] [User] :<|>
+            "users" :> "all" :> Post '[JSON] [User] :<|>
             "posts" :> PostApi :<|>
             "channels" :> ChannelsApi
             )
@@ -58,6 +59,7 @@ mkServerAPI l =
         authenticationAPI :<|> (\uId -> 
         return uId :<|>
         maybeNotFound . runQnotFound . getUsers :<|>
+        runQnotFound getAllUsers :<|>
         postApi uId :<|>
         channelsApi uId
         )

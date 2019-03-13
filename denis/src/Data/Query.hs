@@ -16,6 +16,7 @@ module Data.Query (
     getPosts,
     getUser,
     getUsers,
+    getAllUsers,
     getLastPosts,
     getPostsForUser,
     Limit,
@@ -123,6 +124,9 @@ getUsersQ uIds = case idsToColumn uIds of
         innerJoin (table #users)
             (#ids ! #id .== #users ! #userId))
     Nothing -> Nothing
+
+getAllUsersQ :: Query Schema '[] (RowPG User)
+getAllUsersQ = selectStar $ from $ table #users
 
 getPostsByIdQ :: [PostId] -> Maybe (Query Schema '[] (RowPG PostRowResponse))
 getPostsByIdQ pIds = case idsToColumn pIds of
@@ -285,6 +289,9 @@ getUser uId = runQueryParams getUserQ (Only uId) >>= getRow 0
 
 getUsers :: [UserId] -> StaticPQ (Maybe [User])
 getUsers ids = getUsersQ ids `liftMaybe` (fmap Just . (runQuery >=> getRows))
+
+getAllUsers :: StaticPQ [User]
+getAllUsers = runQuery getAllUsersQ >>= getRows
            
 publishPost :: UserId -> PostCreation -> StaticPQ PostId
 publishPost uId pc  = transactionally_ $ do
