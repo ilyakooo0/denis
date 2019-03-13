@@ -196,7 +196,7 @@ updateNamedChannelQ = update_ #channels
         Set (param @4) `as` #namedChannelFullTags :*
         Set (param @5) `as` #namedChannelFullPeopleIds
     ) 
-    (#namedChannelFullOwner .== param @2 .&& #namedChannelFullId .== param @2)
+    (#namedChannelFullOwner .== param @2 .&& #namedChannelFullId .== param @1)
     
 
 getChannelPostsQ :: Limit -> [UserId] -> Vector Text -> Query Schema '[] (RowPG PostRowResponse)
