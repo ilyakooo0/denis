@@ -24,6 +24,7 @@ import Data.Time.Clock
 import Data.Time.Calendar
 import qualified Data.Vector as V
 import Data.User    
+import qualified Data.Set as Set
 
 
 -- MARK: Documentation
@@ -50,5 +51,9 @@ instance ToJSON AnonymousChannel where
 
 instance FromJSON AnonymousChannel where
     parseJSON = withObject "anonymous channel" $ \e -> 
-        AnonymousChannel <$> e .: "tags" <*> e .: "people"
+        AnonymousChannel <$> fmap (V.fromList . removeDuplicates) (e .: "tags") <*> fmap removeDuplicates (e .: "people")
+        where 
+            removeDuplicates :: Ord a => [a] -> [a]
+            removeDuplicates = Set.toList . Set.fromList
+
         

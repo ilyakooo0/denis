@@ -25,6 +25,7 @@ import Data.Time.Clock
 import Data.Time.Calendar
 import qualified Data.Vector as V
 import Data.User    
+import qualified Data.Set as Set
 
 -- MARK: Documentation
 
@@ -54,9 +55,12 @@ instance (ToJSON u) => ToJSON (NamedChannel u) where
         "tags" .= cTags,
         "people" .= cPeople ]
 
-instance (FromJSON u) => FromJSON (NamedChannel u) where
+instance (FromJSON u, Ord u) => FromJSON (NamedChannel u) where
     parseJSON = withObject "named channel" $ \e -> 
-        NamedChannel <$> e .: "id" <*> e .: "name" <*> e .: "tags" <*> e .: "people"
+        NamedChannel <$> e .: "id" <*> e .: "name" <*> fmap removeDuplicates (e .: "tags") <*> fmap removeDuplicates (e .: "people")
+        where 
+            removeDuplicates :: Ord a => [a] -> V.Vector a
+            removeDuplicates = V.fromList . Set.toList . Set.fromList
         
 -- MARK: NamedChannelCreationRequest
         
@@ -77,4 +81,7 @@ instance ToJSON NamedChannelCreationRequest where
         
 instance FromJSON NamedChannelCreationRequest where
     parseJSON = withObject "named channel" $ \e -> 
-        NamedChannelCreationRequest <$> e .: "name" <*> e .: "tags" <*> e .: "people"
+        NamedChannelCreationRequest <$> e .: "name" <*> fmap removeDuplicates (e .: "tags") <*> fmap removeDuplicates (e .: "people")
+        where 
+            removeDuplicates :: Ord a => [a] -> V.Vector a
+            removeDuplicates = V.fromList . Set.toList . Set.fromList

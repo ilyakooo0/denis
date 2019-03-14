@@ -52,7 +52,7 @@ import GHC.Generics (Generic)
 import Data.Aeson
 import Servant.Docs
 import Data.Proxy
-import Data.Vector (Vector, toList)
+import Data.Vector (Vector, toList, fromList)
 import Data.Text (Text)
 import Data.Channel.NamedChannel
 import Data.Channel.AnonymousChannel
@@ -117,6 +117,14 @@ getPostQ oTe te = select (
 
 getUserQ :: Query Schema (TuplePG (Only UserId)) (RowPG User)
 getUserQ = selectStar $ from (table #users) & where_ (#userId .== param @1)
+
+verifiedUserIdsQ :: [UserId] -> Maybe (Query Schema '[] (RowPG (Only UserId)))
+verifiedUserIdsQ uIds = case idsToColumn uIds of
+    Just idQ -> Just $ select (#users ! #userId `as` #fromOnly) $ from (subquery (idQ `As` #ids) & 
+        innerJoin (table #users)
+            (#ids ! #id .== #users ! #userId))
+    Nothing -> Nothing
+
 
 getUsersQ :: [UserId] -> Maybe (Query Schema '[] (RowPG User))
 getUsersQ uIds = case idsToColumn uIds of
@@ -264,6 +272,12 @@ getChannelForUser uId cId = do
         (Just c) -> return c
         Nothing -> lift $ S.throwError S.err404
 
+-- TODO: Reject bad requests. Should be binary.
+verifiedUsers :: [UserId] -> StaticPQ [UserId]
+verifiedUsers uIds = 
+    case verifiedUserIdsQ uIds of
+        Just uIdsQ -> fmap fromOnly <$> (runQuery uIdsQ >>= getRows)
+        Nothing -> return []
 
 -- MARK: FrontEnd functions
 
@@ -305,13 +319,15 @@ publishPost uId pc  = transactionally_ $ do
 
 createNewChannel :: UserId -> NamedChannelCreationRequest -> StaticPQ (Maybe NamedChannelId)
 createNewChannel uId req = transactionally_ $ do
-    cId <- manipulateParams createNamedChannelQ (addUserToChannelCreate uId req) >>= firstRow
+    uIds <- verifiedUsers . toList $ namedChannelCreationRequestPeopleIds req
+    cId <- manipulateParams createNamedChannelQ (addUserToChannelCreate uId (req {namedChannelCreationRequestPeopleIds = fromList uIds})) >>= firstRow
     return $ fmap fromOnly cId
 
 updateChannel :: UserId -> NamedChannel UserId -> StaticPQ ()
 updateChannel uId req = transactionally_ $ do
+    uIds <- fmap fromList . verifiedUsers . toList $ namedChannelPeopleIds req
     _ <- getChannelForUser uId $ namedChannelId req
-    _ <- manipulateParams updateNamedChannelQ $ addUserToChannelUpdate uId req
+    _ <- manipulateParams updateNamedChannelQ $ addUserToChannelUpdate uId (req {namedChannelPeopleIds = uIds})
     return ()
 
 getChannelPosts :: UserId -> Limit -> NamedChannelId -> StaticPQ PostResponse
