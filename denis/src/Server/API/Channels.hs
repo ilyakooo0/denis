@@ -54,7 +54,7 @@ createChannelApi uId req = maybeNotFound . runQnotFound $ createNewChannel uId r
 
 updateChannelApi :: UserId -> NamedChannel UserId -> App NoContent
 updateChannelApi uId req = do
-    runQnotFound $ updateChannel uId req
+    runQ err500 $ updateChannel uId req
     return NoContent
 
 deleteChannelApi :: UserId -> NamedChannelId -> App NoContent
