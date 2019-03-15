@@ -324,7 +324,7 @@ createNewChannel uId req = transactionally_ $ do
     return $ fmap fromOnly cId
 
 updateChannel :: UserId -> NamedChannel UserId -> StaticPQ ()
-updateChannel uId req = transactionally_ $ do
+updateChannel uId req = do
     uIds <- fmap fromList . verifiedUsers . toList $ namedChannelPeopleIds req
     _ <- getChannelForUser uId $ namedChannelId req
     _ <- manipulateParams updateNamedChannelQ $ addUserToChannelUpdate uId (req {namedChannelPeopleIds = uIds})
