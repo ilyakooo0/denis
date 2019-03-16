@@ -352,7 +352,7 @@ getAllChannels uId = fmap (map removeUserFromChannel) $
 deleteNamedChannel :: UserId -> NamedChannelId -> StaticPQ ()
 -- deleteNamedChannel uId cId = transactionally_ $ do
 deleteNamedChannel uId cId = do
-        _ <- getChannelForUser uId cId
+    _ <- getChannelForUser uId cId
     _ <- manipulateParams deleteNamedChannelQ (Only cId)
     return ()
 
