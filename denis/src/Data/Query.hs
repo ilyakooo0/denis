@@ -309,7 +309,8 @@ getAllUsers :: StaticPQ [User]
 getAllUsers = runQuery getAllUsersQ >>= getRows
            
 publishPost :: UserId -> PostCreation -> StaticPQ PostId
-publishPost uId pc  = transactionally_ $ do
+-- publishPost uId pc  = transactionally_ $ do
+publishPost uId pc = do
     pId' <- manipulateParams createPostRowQ (uId, postCreationTags pc) >>= firstRow
     case pId' of
         (Just (Only pId)) -> do
@@ -318,12 +319,14 @@ publishPost uId pc  = transactionally_ $ do
         _ -> lift $ S.throwError S.err404
 
 createNewChannel :: UserId -> NamedChannelCreationRequest -> StaticPQ (Maybe NamedChannelId)
-createNewChannel uId req = transactionally_ $ do
+-- createNewChannel uId req = transactionally_ $ do
+createNewChannel uId req = do
     uIds <- verifiedUsers . toList $ namedChannelCreationRequestPeopleIds req
     cId <- manipulateParams createNamedChannelQ (addUserToChannelCreate uId (req {namedChannelCreationRequestPeopleIds = fromList uIds})) >>= firstRow
     return $ fmap fromOnly cId
 
 updateChannel :: UserId -> NamedChannel UserId -> StaticPQ ()
+-- updateChannel uId req = transactionally_ $ do
 updateChannel uId req = do
     uIds <- fmap fromList . verifiedUsers . toList $ namedChannelPeopleIds req
     _ <- getChannelForUser uId $ namedChannelId req
@@ -347,8 +350,9 @@ getAllChannels uId = fmap (map removeUserFromChannel) $
     runQueryParams getAllChannelsForUserQ (Only uId) >>= getRows
 
 deleteNamedChannel :: UserId -> NamedChannelId -> StaticPQ ()
-deleteNamedChannel uId cId = transactionally_ $ do
-    _ <- getChannelForUser uId cId
+-- deleteNamedChannel uId cId = transactionally_ $ do
+deleteNamedChannel uId cId = do
+        _ <- getChannelForUser uId cId
     _ <- manipulateParams deleteNamedChannelQ (Only cId)
     return ()
 
