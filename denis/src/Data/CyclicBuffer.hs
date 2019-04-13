@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fno-warn-unused-top-binds #-}
+
 module Data.CyclicBuffer (
     CyclicBuffer(elems),
     mkCyclicBuffer,

@@ -20,9 +20,6 @@ import Data.Aeson
 import Servant.Docs (ToSample, toSamples, samples)
 import Data.Proxy
 import Data.Text (Text)
-import Data.Function (on)
-import Data.Time.Clock
-import Data.Time.Calendar
 import qualified Data.Vector as V
 import Data.User    
 import qualified Data.Set as Set

@@ -6,6 +6,7 @@
     TypeApplications ,
     TypeOperators,
     OverloadedStrings #-}
+{-# OPTIONS_GHC -fno-warn-unused-top-binds #-}
 
 
 module Data.PostElement (

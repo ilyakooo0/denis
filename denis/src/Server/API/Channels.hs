@@ -12,21 +12,14 @@ module Server.API.Channels (
 ) where
 
 import Servant.API
-import qualified Data.Post as P
-import Data.Aeson 
 import Server.App
 import Servant.Server
 import Data.Query
 import Data.User
 import Data.Connection
-import Data.Word (Word64)
-import Servant.Docs (ToSample, toSamples, samples)
 import Server.LimitingRequest
 import Data.Channel.NamedChannel
 import Data.Channel.AnonymousChannel
-
-import Control.Monad.Reader (asks, lift)
-import Squeal.PostgreSQL.Pool
     
 -- MARK: Implementation
 

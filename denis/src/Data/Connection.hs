@@ -28,8 +28,6 @@ import Control.Monad.Except
 import Servant.Server
 import Server.Error
 import Control.Monad.Trans.Control
-import Squeal.PostgreSQL.Transaction
-import Squeal.PostgreSQL.PQ
 
 type StaticPQ = PoolPQ Schema Handler
 
