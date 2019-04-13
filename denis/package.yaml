@@ -32,7 +32,8 @@ dependencies:
 - servant-websockets
 - websockets
 - squeal-postgresql
-- transformers-base
+# - transformers-base
+- monad-control
 - generics-sop
 - containers
 - mtl

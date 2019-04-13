@@ -24,6 +24,9 @@ import Servant.Docs (ToSample, toSamples, samples)
 import Server.LimitingRequest
 import Data.Channel.NamedChannel
 import Data.Channel.AnonymousChannel
+
+import Control.Monad.Reader (asks, lift)
+import Squeal.PostgreSQL.Pool
     
 -- MARK: Implementation
 
@@ -54,7 +57,7 @@ createChannelApi uId req = maybeNotFound . runQnotFound $ createNewChannel uId r
 
 updateChannelApi :: UserId -> NamedChannel UserId -> App NoContent
 updateChannelApi uId req = do
-    runQ err500 $ updateChannel uId req
+    runQnotFound $ updateChannel uId req
     return NoContent
 
 deleteChannelApi :: UserId -> NamedChannelId -> App NoContent

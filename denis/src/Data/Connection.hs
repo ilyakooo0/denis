@@ -4,7 +4,8 @@
     OverloadedLabels,
     OverloadedStrings ,
     TypeApplications ,
-    TypeOperators #-}
+    TypeOperators,
+    FlexibleContexts #-}
 
 module Data.Connection (
     Connection,
@@ -14,7 +15,8 @@ module Data.Connection (
     runQnotFound,
     runQerror,
     maybeNotFound,
-    maybeInvalidToken
+    maybeInvalidToken,
+    commitedTransactionallyUpdate
 ) where
 
 import Squeal.PostgreSQL
@@ -25,6 +27,9 @@ import Control.Monad.Reader
 import Control.Monad.Except
 import Servant.Server
 import Server.Error
+import Control.Monad.Trans.Control
+import Squeal.PostgreSQL.Transaction
+import Squeal.PostgreSQL.PQ
 
 type StaticPQ = PoolPQ Schema Handler
 
@@ -51,3 +56,5 @@ maybeInvalidToken = (>>= (\t -> case t of
     Just y -> return y
     Nothing -> throwError invalidToken))
     
+commitedTransactionallyUpdate :: (MonadBaseControl IO tx, MonadPQ schema tx) => tx x -> tx x
+commitedTransactionallyUpdate = transactionally $ TransactionMode ReadCommitted ReadWrite NotDeferrable
