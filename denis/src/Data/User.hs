@@ -10,7 +10,7 @@
 module Data.User (
     User(..),
     UserId
-) where 
+) where
 
 import Data.Int (Int64)
 import qualified Generics.SOP as SOP
@@ -46,3 +46,7 @@ instance ToJSON User where
         "middleName" .= mName,
         "lastName" .= lName
         ]
+
+instance FromJSON User where
+    parseJSON = withObject "named channel" $ \e ->
+        User <$> e .: "id" <*> e .: "firstName" <*> e .: "middleName" <*> e .: "lastName"

@@ -20,14 +20,15 @@ import Data.Connection
 import Server.LimitingRequest
 import Data.Channel.NamedChannel
 import Data.Channel.AnonymousChannel
-    
+import qualified Data.Post as P
+
 -- MARK: Implementation
 
 type NamedChannelRequest = LimitingRequest NamedChannelId
 
 type ChannelsApi = Post '[JSON] [NamedChannel UserId] :<|>
-    "get" :> ReqBody '[JSON] NamedChannelRequest :> Post '[JSON] PostResponse :<|>
-    "getAnonymous" :> ReqBody '[JSON] (LimitingRequest AnonymousChannel) :> Post '[JSON] PostResponse :<|>
+    "get" :> ReqBody '[JSON] NamedChannelRequest :> Post '[JSON] (ResponseWithUsers [P.Post]) :<|>
+    "getAnonymous" :> ReqBody '[JSON] (LimitingRequest AnonymousChannel) :> Post '[JSON] (ResponseWithUsers [P.Post]) :<|>
     "create" :> ReqBody '[JSON] NamedChannelCreationRequest :> Post '[JSON] NamedChannelId :<|>
     "update" :> ReqBody '[JSON] (NamedChannel UserId) :> PostNoContent '[JSON, FormUrlEncoded, PlainText] NoContent :<|>
     "delete" :> ReqBody '[JSON] NamedChannelId :> PostNoContent '[JSON, FormUrlEncoded, PlainText] NoContent
@@ -39,10 +40,10 @@ channelsApi uId = getChannelsApi uId :<|> getChannel uId :<|> getAnonymousChanne
 getChannelsApi :: UserId -> App [NamedChannel UserId]
 getChannelsApi uId = runQnotFound $ getAllChannels uId
 
-getAnonymousChannelsApi :: LimitingRequest AnonymousChannel -> App PostResponse
+getAnonymousChannelsApi :: LimitingRequest AnonymousChannel -> App (ResponseWithUsers [P.Post])
 getAnonymousChannelsApi (LimitingRequest req lim) = runQnotFound $ getAnonymousChannelPosts lim req
 
-getChannel :: UserId -> NamedChannelRequest -> App PostResponse
+getChannel :: UserId -> NamedChannelRequest -> App (ResponseWithUsers [P.Post])
 getChannel uId (LimitingRequest cId lim) = runQnotFound $ getChannelPosts uId lim cId
 
 createChannelApi :: UserId -> NamedChannelCreationRequest -> App NamedChannelId
@@ -54,6 +55,6 @@ updateChannelApi uId req = do
     return NoContent
 
 deleteChannelApi :: UserId -> NamedChannelId -> App NoContent
-deleteChannelApi uId cId = do 
+deleteChannelApi uId cId = do
     runQnotFound $ deleteNamedChannel uId cId
     return NoContent
