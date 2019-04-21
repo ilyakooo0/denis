@@ -9,7 +9,8 @@
     TypeFamilies,
     LambdaCase,
     PartialTypeSignatures,
-    TupleSections #-}
+    TupleSections,
+    DeriveGeneric #-}
 
 {-# OPTIONS_GHC -Wno-partial-type-signatures #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
@@ -37,28 +38,39 @@ import Control.Monad
 import Control.Monad.Error.Class
 import Servant.Docs hiding (Response)
 import qualified Data.Map as M
+import Data.Text.Encoding (decodeUtf8)
+import Data.Aeson
+import GHC.Generics
 
 -- MARK: Documentation
 
 instance (HasDocs api) => HasDocs (ComplexQuery :> api) where
     docsFor _ = docsFor (Proxy :: Proxy (ComplexApi :<|> api))
 
-instance {-# Overlapping #-} ToSample (ComplexQueryRequest) where
-    toSamples _ = samples $ [
-        M.fromList [("posts/last", "8"), ("channels/", "")],
-        M.fromList [("channels/","[{\"people\":[1],\"name\":\"newChannelName\",\"id\":7,\"tags\":[]},{\"people\":[1],\"name\":\"newChannelName\",\"id\":6,\"tags\":[]},{\"people\":[1],\"name\":\"newChannelName\",\"id\":5,\"tags\":[]},{\"people\":[1,1,2,2,2],\"name\":\"sssss\",\"id\":4,\"tags\":[\"thisIsHashTag\",\"thisIsHashTag\",\"thisIsHashTag\",\"thisIsHashTag\",\"thisIsAlsoHashTag\",\"cs\"]},{\"people\":[1,7,2,19],\"name\":\"ChannelName\",\"id\":1,\"tags\":[\"sos\"]}]"),("posts/last", "{\"users\":{\"1\":{\"middleName\":\"FirstUser\",\"lastName\":\"FirstUser\",\"firstName\":\"FirstUser\",\"id\":1}},\"response\":[{\"body\":[{\"markdown\":\"hello\"}],\"authorId\":1,\"id\":28,\"updated\":\"2019-04-13T16:14:38.495832Z\",\"tags\":[]}]}")]]
+instance {-# Overlapping #-} ToSample [ComplexQueryRequest] where
+    toSamples _ = singleSample $ [ComplexQueryRequest "channels/" "", ComplexQueryRequest "posts/last" "3"]
+
+instance {-# Overlapping #-} ToSample [T.Text] where
+    toSamples _ = singleSample ["[{\"people\":[1],\"name\":\"newChannelName\",\"id\":7,\"tags\":[]},{\"people\":[1],\"name\":\"newChannelName\",\"id\":6,\"tags\":[]},{\"people\":[1],\"name\":\"newChannelName\",\"id\":5,\"tags\":[]},{\"people\":[1,1,2,2,2],\"name\":\"sssss\",\"id\":4,\"tags\":[\"thisIsHashTag\",\"thisIsHashTag\",\"thisIsHashTag\",\"thisIsHashTag\",\"thisIsAlsoHashTag\",\"cs\"]},{\"people\":[1,7,2,19],\"name\":\"соытвототтоциология\",\"id\":1,\"tags\":[\"sos\"]}]","{\"users\":{\"1\":{\"middleName\":\"FirstUser\",\"lastName\":\"FirstUser\",\"firstName\":\"FirstUser\",\"id\":1}},\"response\":[{\"body\":[{\"markdown\":\"hello\"}],\"authorId\":1,\"id\":28,\"updated\":\"2019-04-13T16:14:38.495832Z\",\"tags\":[]},{\"body\":[{\"markdown\":\"Hello, blyat\"}],\"authorId\":1,\"id\":27,\"updated\":\"2005-01-03T12:34:56Z\",\"tags\":[]}]}"]
 
 -- MARK: Implementation
 
 data ComplexQuery
 
 
-type ComplexQueryRequest = M.Map T.Text String
-type ComplexQueryRepsonse =  M.Map T.Text String
+data ComplexQueryRequest = ComplexQueryRequest {
+    url :: T.Text,
+    body :: String
+} deriving (Generic)
 
-type ComplexQueryDescription = Description "Complex query\nNOTE: both request and response samples are the same. The first one is the request, the second one is the response.\nAllows you to query several endpoints within one request.\nThe order of queries (both execution and response) is not determined. If one of the queries returns a non-2XX response, the first such response is returned.\n## Do not perform modifications in this query. You will have no way of telling whether it succeeded."
+instance ToJSON ComplexQueryRequest
+instance FromJSON ComplexQueryRequest
 
-type ComplexApi = "complex" :> ComplexQueryDescription :> ReqBody '[JSON] (ComplexQueryRequest) :> Post '[JSON] (ComplexQueryRepsonse)
+type ComplexQueryRepsonse = T.Text
+
+type ComplexQueryDescription = Description "Complex query\n\nAllows you to query several endpoints within one request.\n\nResponses are returned in the same order as the requests are sent.\n\nThe order of query execution is not determined. If one of the queries returns a non-2XX response, the first such response is returned.\n\n## Do not perform modifications in this query. You will have no way of telling whether it succeeded."
+
+type ComplexApi = "complex" :> ComplexQueryDescription :> ReqBody '[JSON] ([ComplexQueryRequest]) :> Post '[JSON] [ComplexQueryRepsonse]
 
 instance HasServer api context => HasServer (ComplexQuery :> api :: *) context where
 
@@ -70,35 +82,38 @@ instance HasServer api context => HasServer (ComplexQuery :> api :: *) context w
         where
             rest = route (Proxy :: Proxy api) context subserver
             complexProxy = Proxy :: Proxy (ComplexApi)
-            complexServer :: _ -> Request -> ComplexQueryRequest -> Handler (ComplexQueryRepsonse)
+            complexServer :: _ -> Request -> [ComplexQueryRequest] -> Handler [ComplexQueryRepsonse]
             complexServer env req query = do
                 responses <- liftIO . newTVarIO $ Right M.empty
-                recieved <- liftIO $ forM (M.toList query) $ uncurry $ \queryPath body -> do
-                    newReq <- replaceBody (BSC.pack body) req
-                    serverRest (replacePath queryPath newReq) $ respond responses queryPath
+                recieved <- liftIO $ forM (zip [0..] query) $ uncurry $ \queryIndex (ComplexQueryRequest queryPath queryBody) -> do
+                    newReq <- replaceBody (BSC.pack queryBody) req
+                    serverRest (replacePath queryPath newReq) $ respond responses queryIndex
                 recieved `seq` do
                     result <- liftIO $ readTVarIO responses
                     case result of
                         Left err -> throwError err
-                        Right resp -> return resp
+                        Right resp -> sequence . map (throwMaybe . flip M.lookup resp) $ [0..((length query) - 1)]
                 where
                     serverRest = runRouterEnv (route (Proxy :: Proxy api) context subserver) env
-                    respond :: TVar (Either ServantErr (M.Map T.Text String)) -> T.Text -> RouteResult Response -> IO ResponseReceived
-                    respond responses queryPath = (>> return ResponseReceived) .
+                    respond :: TVar (Either ServantErr (M.Map Int T.Text)) -> Int -> RouteResult Response -> IO ResponseReceived
+                    respond responses queryIndex = (>> return ResponseReceived) .
                         \case
                             (Fail err) -> atomically . writeTVar responses $ Left err
                             (FailFatal err) -> atomically . writeTVar responses $ Left err
                             (Route r) -> do
-                                body <- BSC.unpack <$> responseBody r
-                                atomically . modifyTVar responses $ fmap (M.insert queryPath body)
+                                rBody <- decodeUtf8 . BSC.toStrict <$> responseBody r
+                                atomically . modifyTVar responses $ fmap (M.insert queryIndex rBody)
+                    throwMaybe :: Maybe a -> Handler a
+                    throwMaybe Nothing = throwError err500
+                    throwMaybe (Just a) = return a
             complex = RawRouter $ \env req ->
                 (flip runRouterEnv env $ route complexProxy context (emptyDelayed (Route $ complexServer env req))) req
 
 -- ref: https://stackoverflow.com/questions/45467648/how-to-read-response-body-in-wai-middleware
 responseBody :: Response -> IO ByteString
 responseBody res =
-  let (_,_,body) = responseToStream res in
-  body $ \f -> do
+  let (_,_,rBody) = responseToStream res in
+  rBody $ \f -> do
     content <- newIORef mempty
     f (\chunk -> modifyIORef' content (<> chunk)) (return ())
     toLazyByteString <$> readIORef content

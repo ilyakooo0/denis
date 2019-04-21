@@ -1,7 +1,10 @@
 {-# LANGUAGE DataKinds,
     TypeOperators,
     OverloadedStrings,
-    ScopedTypeVariables #-}
+    ScopedTypeVariables,
+    TypeSynonymInstances,
+    FlexibleInstances #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 module Server.Logger (
     Logger,
@@ -22,6 +25,10 @@ import Server.App
 import Network.Wai.Middleware.RequestLogger
 import Data.Default.Class
 import qualified System.Log.FastLogger as FL
+import Servant.Docs
+
+instance HasDocs "log" where
+    docsFor _ _ _ = emptyAPI
 
 type Log = T.Text
 
@@ -38,11 +45,11 @@ getLog :: TVar (CyclicBuffer BL.ByteString) -> Logger
 getLog buff = decodeUtf8 . BL.concat . intersperse "\n" . elems <$> liftIO (readTVarIO buff)
 
 mkWaiLogger :: TVar (CyclicBuffer BL.ByteString) -> IO Middleware
-mkWaiLogger buff = let 
+mkWaiLogger buff = let
     settings = def {
-        -- outputFormat = CustomOutputFormatWithDetails (\ date req _ _ tDiff bss bldr -> 
+        -- outputFormat = CustomOutputFormatWithDetails (\ date req _ _ tDiff bss bldr ->
         --     FL.toLogStr (show date) <> (FL.toLogStr . unpack $ fold bss))
         outputFormat = Detailed False,
-        destination = Callback (atomically . modifyTVar buff . flip insertIntoCyclicBuffer . FL.fromLogStr)    
+        destination = Callback (atomically . modifyTVar buff . flip insertIntoCyclicBuffer . FL.fromLogStr)
         }
     in mkRequestLogger settings
