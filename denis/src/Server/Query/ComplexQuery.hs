@@ -45,7 +45,7 @@ instance (HasDocs api) => HasDocs (ComplexQuery :> api) where
 
 instance {-# Overlapping #-} ToSample (ComplexQueryRequest) where
     toSamples _ = samples $ [
-        M.fromList [("posts/last", "8"), ("users/all", "")],
+        M.fromList [("posts/last", "8"), ("channels/", "")],
         M.fromList [("channels/","[{\"people\":[1],\"name\":\"newChannelName\",\"id\":7,\"tags\":[]},{\"people\":[1],\"name\":\"newChannelName\",\"id\":6,\"tags\":[]},{\"people\":[1],\"name\":\"newChannelName\",\"id\":5,\"tags\":[]},{\"people\":[1,1,2,2,2],\"name\":\"sssss\",\"id\":4,\"tags\":[\"thisIsHashTag\",\"thisIsHashTag\",\"thisIsHashTag\",\"thisIsHashTag\",\"thisIsAlsoHashTag\",\"cs\"]},{\"people\":[1,7,2,19],\"name\":\"ChannelName\",\"id\":1,\"tags\":[\"sos\"]}]"),("posts/last", "{\"users\":{\"1\":{\"middleName\":\"FirstUser\",\"lastName\":\"FirstUser\",\"firstName\":\"FirstUser\",\"id\":1}},\"response\":[{\"body\":[{\"markdown\":\"hello\"}],\"authorId\":1,\"id\":28,\"updated\":\"2019-04-13T16:14:38.495832Z\",\"tags\":[]}]}")]]
 
 -- MARK: Implementation
