@@ -56,12 +56,10 @@ import Data.Aeson
 import Servant.Docs
 import Data.Proxy
 import Data.Vector (Vector, toList, fromList)
-import qualified Data.Vector as V
 import Data.Text (Text)
 import Data.Channel.NamedChannel
 import Data.Channel.AnonymousChannel
 import Data.Maybe (fromMaybe)
-import Data.Sanitizer
 
 -- MARK: Documentation
 
@@ -307,23 +305,21 @@ getAllUsers = runQuery getAllUsersQ >>= getRows
 
 publishPost :: UserId -> PostCreation -> StaticPQ PostId
 publishPost uId pc  = commitedTransactionallyUpdate $ do
-    pId' <- manipulateParams createPostRowQ (uId, V.map sanitizeHtml . postCreationTags $ pc) >>= firstRow
+    pId' <- manipulateParams createPostRowQ (uId, postCreationTags pc) >>= firstRow
     case pId' of
         (Just (Only pId)) -> do
-            traversePrepared_ createPostElementRowsQ $ elementsToRows pId (sanitizeHtml . postCreationBody $ pc)
+            traversePrepared_ createPostElementRowsQ $ elementsToRows pId (postCreationBody pc)
             return pId
         _ -> lift $ S.throwError S.err404
 
 createNewChannel :: UserId -> NamedChannelCreationRequest -> StaticPQ (Maybe NamedChannelId)
-createNewChannel uId (NamedChannelCreationRequest cName cTags cPeople) = commitedTransactionallyUpdate $ do
-    uIds <- verifiedUsers . toList $ cPeople
-    cId <- manipulateParams createNamedChannelQ (addUserToChannelCreate uId
-        (NamedChannelCreationRequest (sanitizeHtml cName) (sanitizeHtml cTags) (fromList uIds))) >>= firstRow
+createNewChannel uId req = commitedTransactionallyUpdate $ do
+    uIds <- verifiedUsers . toList $ namedChannelCreationRequestPeopleIds req
+    cId <- manipulateParams createNamedChannelQ (addUserToChannelCreate uId (req {namedChannelCreationRequestPeopleIds = fromList uIds})) >>= firstRow
     return $ fmap fromOnly cId
 
 updateChannel :: UserId -> NamedChannel UserId -> StaticPQ ()
-updateChannel uId (NamedChannel nId nName nTags nPeople) = commitedTransactionallyUpdate $ do
-    let req = NamedChannel nId (sanitizeHtml nName) (sanitizeHtml nTags) nPeople
+updateChannel uId req = commitedTransactionallyUpdate $ do
     uIds <- fmap fromList . verifiedUsers . toList $ namedChannelPeopleIds req
     _ <- getChannelForUser uId $ namedChannelId req
     _ <- manipulateParams updateNamedChannelQ $ addUserToChannelUpdate uId (req {namedChannelPeopleIds = uIds})
