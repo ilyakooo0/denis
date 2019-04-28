@@ -27,6 +27,7 @@ import Servant.Docs (HasDocs, docsFor, notes, DocNote(DocNote))
 import Server.API.Channels
 import Control.Lens
 import Server.Query.ComplexQuery
+import Server.API.Completions
 
 -- MARK: Documentation
 
@@ -48,7 +49,8 @@ type API =
             "users" :> "all" :> Post '[JSON] [User] :<|>
             "posts" :> PostApi :<|>
             "channels" :> ChannelsApi
-            )
+            ) :<|>
+        CompletionsAPI
 
 serverProxy :: Proxy API
 serverProxy = Proxy
@@ -62,4 +64,5 @@ mkServerAPI l =
         runQnotFound getAllUsers :<|>
         postApi uId :<|>
         channelsApi uId
-        )
+        ) :<|>
+        completionServer

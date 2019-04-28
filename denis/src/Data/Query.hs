@@ -30,7 +30,8 @@ module Data.Query (
     deleteNamedChannel,
     HasUsers(..),
     wrapIntoUsers,
-    ResponseWithUsers(..)
+    ResponseWithUsers(..),
+    getTags
 ) where
 
 import Squeal.PostgreSQL
@@ -226,6 +227,9 @@ getChannelPostsQ lim uIds tags = selectStar $ from (subquery $ postsQ' `As` #bar
             Nothing -> id
         postsQ' = unionWithUsers $ getPostQ id $ where_ $ jsonbLit tags .?| #postRowTags
 
+getTagsQ :: Query Schema '[] (RowPG (Only String))
+getTagsQ = selectDistinct (unsafeFunction "unnest" #postRowTags `as` #fromOnly) $
+    from (table #posts)
 
 -- MARK: FrontEnd Data Structures
 
@@ -347,6 +351,8 @@ deleteNamedChannel uId cId = commitedTransactionallyUpdate $ do
     _ <- manipulateParams deleteNamedChannelQ (Only cId)
     return ()
 
+getTags :: StaticPQ [String]
+getTags = map fromOnly <$> (runQuery getTagsQ >>= getRows)
 
 -- MARK: Utils
 
