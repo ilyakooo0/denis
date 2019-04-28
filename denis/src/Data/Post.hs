@@ -15,7 +15,7 @@ module Data.Post (
     QuoteId,
     PostRowResponse(..),
     PostCreation(..)
-) where 
+) where
 
 import Data.Int (Int64)
 import qualified Generics.SOP as SOP
@@ -37,10 +37,10 @@ instance ToSample Post where
         where time = UTCTime (ModifiedJulianDay 1000) 8
 
 instance ToSample PostCreation where
-    toSamples _ = samples $ PostCreation <$> (map snd $ toSamples Proxy) <*> [(V.fromList ["hse", "cs", "machineLearning"])] 
-        
+    toSamples _ = samples $ PostCreation <$> (map snd $ toSamples Proxy) <*> [(V.fromList ["hse", "cs", "machineLearning"])]
 
--- MARK: Actual type 
+
+-- MARK: Actual type
 
 type PostId = Int64
 type QuoteId = Int64
@@ -51,7 +51,7 @@ data Post = Post {
     updated :: UTCTime,
     postTags :: V.Vector Text,
     postBody :: [PostElement Post]
-}
+} deriving (Show)
 
 instance ToJSON Post where
     toJSON (Post pId aId tm tags pb) = object [
@@ -59,7 +59,7 @@ instance ToJSON Post where
         "authorId" .= aId,
         "updated" .= tm,
         "tags" .= tags,
-        "body" .= pb ] 
+        "body" .= pb ]
 
 data PostCreation = PostCreation {
     postCreationBody :: [PostElement Post],
@@ -72,12 +72,12 @@ instance SOP.HasDatatypeInfo PostCreation
 instance ToJSON PostCreation where
     toJSON (PostCreation body tags) = object [
         "tags" .= tags,
-        "body" .= body ] 
+        "body" .= body ]
 
 instance FromJSON PostCreation where
-    parseJSON = withObject "post creation" $ \e -> 
+    parseJSON = withObject "post creation" $ \e ->
         PostCreation <$> e .: "body" <*> e .: "tags"
-        
+
 
 -- MARK: Rows
 

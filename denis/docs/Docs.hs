@@ -50,6 +50,9 @@ instance ToSample Word64 where
 instance ToSample Log where
     toSamples _ = noSamples
 
+instance ToSample () where
+    toSamples _ = singleSample ()
+
 normalizer :: String -> String
 normalizer (' ':' ':' ':' ':'`':'`':'`':xs) = "```" ++ normalizer xs
 normalizer (x:xs) = x : normalizer xs

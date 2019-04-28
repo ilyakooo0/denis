@@ -17,18 +17,16 @@ import Servant.Server
 import Data.Query
 import Data.User
 import Data.Connection
-import Server.LimitingRequest
 import Data.Channel.NamedChannel
 import Data.Channel.AnonymousChannel
 import qualified Data.Post as P
+import Server.Query.Pagination
 
 -- MARK: Implementation
 
-type NamedChannelRequest = LimitingRequest NamedChannelId
-
 type ChannelsApi = Post '[JSON] [NamedChannel UserId] :<|>
-    "get" :> ReqBody '[JSON] NamedChannelRequest :> Post '[JSON] (ResponseWithUsers [P.Post]) :<|>
-    "getAnonymous" :> ReqBody '[JSON] (LimitingRequest AnonymousChannel) :> Post '[JSON] (ResponseWithUsers [P.Post]) :<|>
+    "get" :> ReqBody '[JSON] (PaginatingRequest P.PostId NamedChannelId) :> Post '[JSON] (ResponseWithUsers [P.Post]) :<|>
+    "getAnonymous" :> ReqBody '[JSON] (PaginatingRequest P.PostId AnonymousChannel) :> Post '[JSON] (ResponseWithUsers [P.Post]) :<|>
     "create" :> ReqBody '[JSON] NamedChannelCreationRequest :> Post '[JSON] NamedChannelId :<|>
     "update" :> ReqBody '[JSON] (NamedChannel UserId) :> PostNoContent '[JSON, FormUrlEncoded, PlainText] NoContent :<|>
     "delete" :> ReqBody '[JSON] NamedChannelId :> PostNoContent '[JSON, FormUrlEncoded, PlainText] NoContent
@@ -40,11 +38,11 @@ channelsApi uId = getChannelsApi uId :<|> getChannel uId :<|> getAnonymousChanne
 getChannelsApi :: UserId -> App [NamedChannel UserId]
 getChannelsApi uId = runQnotFound $ getAllChannels uId
 
-getAnonymousChannelsApi :: LimitingRequest AnonymousChannel -> App (ResponseWithUsers [P.Post])
-getAnonymousChannelsApi (LimitingRequest req lim) = runQnotFound $ getAnonymousChannelPosts lim req
+getAnonymousChannelsApi :: PaginatingRequest P.PostId AnonymousChannel -> App (ResponseWithUsers [P.Post])
+getAnonymousChannelsApi (PaginatingRequest pId lim req) = runQnotFound $ getAnonymousChannelPosts pId lim req
 
-getChannel :: UserId -> NamedChannelRequest -> App (ResponseWithUsers [P.Post])
-getChannel uId (LimitingRequest cId lim) = runQnotFound $ getChannelPosts uId lim cId
+getChannel :: UserId -> PaginatingRequest P.PostId NamedChannelId -> App (ResponseWithUsers [P.Post])
+getChannel uId (PaginatingRequest pId lim cId) = runQnotFound $ getChannelPosts uId pId lim cId
 
 createChannelApi :: UserId -> NamedChannelCreationRequest -> App NamedChannelId
 createChannelApi uId req = maybeNotFound . runQnotFound $ createNewChannel uId req

@@ -53,7 +53,7 @@ import qualified GHC.Generics as GHC
 import Data.Int (Int64)
 import Data.ByteString.Char8 (pack)
 import GHC.Generics (Generic)
-import Data.Aeson
+import Data.Aeson hiding (Null)
 import Servant.Docs
 import Data.Proxy
 import Data.Vector (Vector, toList, fromList)
@@ -61,6 +61,7 @@ import Data.Text (Text)
 import Data.Channel.NamedChannel
 import Data.Channel.AnonymousChannel
 import Data.Maybe (fromMaybe)
+import Squeal.PostgreSQL.Render
 
 -- MARK: Documentation
 
@@ -81,7 +82,12 @@ postViewT te = from $ subquery (postsQ te `As` #posts) &
     innerJoin (table #postElements)
     (#posts ! #postRowId .== #postElements ! #rowElementId)
 
-getPostQ :: TableEndo Schema params _ 'Ungrouped -> TableEndo Schema params _ 'Ungrouped -> Query Schema params (RowPG PostRowResponse)
+getPostQ
+    :: TableEndo Schema params _ 'Ungrouped
+    -- ^ PostRowResponse endo
+    -> TableEndo Schema params _ 'Ungrouped
+    -- ^ PostRow endo
+    -> Query Schema params (RowPG PostRowResponse)
 getPostQ oTe te = select (
     #posts ! #postRowId :*
     #posts ! #postRowAuthorId :*
@@ -142,21 +148,26 @@ getAllUsersQ = selectStar $ from $ table #users
 getPostsByIdQ :: [PostId] -> Maybe (Query Schema '[] (RowPG PostRowResponse))
 getPostsByIdQ pIds = case idsToColumn pIds of
     Just idQ -> Just $ selectDotStar #posts $ from (subquery (idQ `As` #ids) &
-        innerJoin (subquery $ getPostQ id id `As` #posts)
+        innerJoin (subquery $ getPostQ (orderBy [#posts ! #postRowId & Desc] . orderBy [#postElements ! #rowElementOrd & Asc]) id `As` #posts)
             (#ids ! #id .== #posts ! #postRowId))
     Nothing -> Nothing
 
 
 type Limit = Word64
 
-getLastNPostsQ :: Limit -> Query Schema params (RowPG PostRowResponse)
-getLastNPostsQ lim = getPostQ
-    (limit lim . orderBy [#posts ! #postRowUpdateTime & Desc]) id
+isNotFalse
+  :: Expression schema from grouping params ('Null ty)
+  -- ^ possibly @NULL@
+  -> Condition schema from grouping params
+isNotFalse x = UnsafeExpression $ renderExpression x <+> "IS NOT FALSE"
 
-getLastNPostsForUserQ :: Limit -> Query Schema (TuplePG (Only UserId)) (RowPG PostRowResponse)
-getLastNPostsForUserQ lim = getPostQ
-    (limit lim . orderBy [#posts ! #postRowUpdateTime & Desc])
-    (where_ $ #postRowAuthorId .== param @1)
+getLastPostsQ :: TableEndo _ _ _ _ -> Limit -> Query Schema ('Null (PG Int64) ': params) (RowPG PostRowResponse)
+getLastPostsQ te lim = getPostQ
+    (orderBy [#posts ! #postRowId & Desc] . orderBy [#postElements ! #rowElementOrd & Asc])
+    (limit lim . te . where_ (isNotFalse $ #posts ! #postRowId .< param @1) . orderBy [#posts ! #postRowId & Desc])
+
+getLastNPostsForUserQ :: Limit -> Query Schema (TuplePG (Maybe PostId, UserId)) (RowPG PostRowResponse)
+getLastNPostsForUserQ = getLastPostsQ $ where_ (#posts ! #postRowAuthorId .== param @2)
 
 createPostRowQ :: Manipulation Schema (TuplePG (UserId, Vector Text)) (RowPG (Only PostId))
 createPostRowQ = insertRow #posts
@@ -214,10 +225,17 @@ updateNamedChannelQ = update_ #channels
     )
     (#namedChannelFullOwner .== param @2 .&& #namedChannelFullId .== param @1)
 
-
-getChannelPostsQ :: Limit -> [UserId] -> Vector Text -> Query Schema '[] (RowPG PostRowResponse)
+getChannelPostsQ
+    :: Limit
+    -> [UserId]
+    -> Vector Text
+    -> Query
+        Schema
+        (TuplePG (Only (Maybe PostId))) -- ^ post id from which to start
+        (RowPG PostRowResponse)
 getChannelPostsQ lim uIds tags = selectStar $ from (subquery $ postsQ' `As` #bar) &
-    orderBy [#postRowUpdateTime & Desc] & limit lim
+    where_ ( isNotFalse $ #postRowId .< param @1) &
+    orderBy [#postRowId & Desc] . orderBy [#rowElementOrd & Asc] & limit lim
     where
         unionWithUsers = case idsToColumn uIds of
             Just uIdsQ -> selectDotStar #posts' (from $ subquery (uIdsQ `As` #uIds) &
@@ -280,10 +298,11 @@ verifiedUsers uIds =
 
 -- MARK: FrontEnd functions
 
-getPostsForUser :: Word64 -> UserId -> StaticPQ (Maybe (ResponseWithUsers [Post]))
-getPostsForUser lim uId = do
-    postRows <- runQueryParams (getLastNPostsForUserQ lim) (Only uId) >>= getRows
-    rowsToPosts postRows `liftMaybe` wrapIntoResponse
+-- Nothing <=> no user
+getPostsForUser :: Maybe PostId -> Limit -> UserId -> StaticPQ (Maybe (ResponseWithUsers [Post]))
+getPostsForUser pId lim uId = do
+    postRows <- runQueryParams (getLastNPostsForUserQ lim) (pId, uId) >>= getRows
+    wrapIntoResponse (fromMaybe [] . rowsToPosts $ postRows)
 
 getPosts :: [PostId] -> StaticPQ (Maybe (ResponseWithUsers [Post]))
 getPosts pId =
@@ -293,9 +312,9 @@ getPosts pId =
             rowsToPosts postRows `liftMaybe` wrapIntoResponse
         Nothing -> return Nothing
 
-getLastPosts :: Word64 -> StaticPQ (Maybe (ResponseWithUsers [Post]))
-getLastPosts n = do
-    postRows <- runQuery (getLastNPostsQ n) >>= getRows
+getLastPosts :: Maybe PostId -> Limit -> StaticPQ (Maybe (ResponseWithUsers [Post]))
+getLastPosts pId lim = do
+    postRows <- runQueryParams (getLastPostsQ id lim) (Only pId) >>= getRows
     rowsToPosts postRows `liftMaybe` wrapIntoResponse
 
 getUser :: UserId -> StaticPQ User
@@ -329,16 +348,16 @@ updateChannel uId req = commitedTransactionallyUpdate $ do
     _ <- manipulateParams updateNamedChannelQ $ addUserToChannelUpdate uId (req {namedChannelPeopleIds = uIds})
     return ()
 
-getChannelPosts :: UserId -> Limit -> NamedChannelId -> StaticPQ (ResponseWithUsers [Post])
-getChannelPosts uId lim cId = do
+getChannelPosts :: UserId -> Maybe PostId -> Limit -> NamedChannelId -> StaticPQ (ResponseWithUsers [Post])
+getChannelPosts uId pId lim cId = do
     channel <- getChannelForUser uId cId
-    postRows <- runQuery (getChannelPostsQ lim (toList $ namedChannelFullPeopleIds channel) (namedChannelFullTags channel))
+    postRows <- runQueryParams (getChannelPostsQ lim (toList $ namedChannelFullPeopleIds channel) (namedChannelFullTags channel)) (Only pId)
         >>= getRows
     fmap (fromMaybe $ ResponseWithUsers mempty mempty) $ rowsToPosts postRows `liftMaybe` wrapIntoResponse
 
-getAnonymousChannelPosts :: Limit -> AnonymousChannel -> StaticPQ (ResponseWithUsers [Post])
-getAnonymousChannelPosts lim (AnonymousChannel tags people) = do
-    postRows <- runQuery (getChannelPostsQ lim people tags) >>= getRows
+getAnonymousChannelPosts :: Maybe PostId -> Limit -> AnonymousChannel -> StaticPQ (ResponseWithUsers [Post])
+getAnonymousChannelPosts pId lim (AnonymousChannel tags people) = do
+    postRows <- runQueryParams (getChannelPostsQ lim people tags) (Only pId) >>= getRows
     fmap (fromMaybe $ ResponseWithUsers mempty mempty) $ rowsToPosts postRows `liftMaybe` wrapIntoResponse
 
 getAllChannels :: UserId -> StaticPQ [NamedChannel UserId]

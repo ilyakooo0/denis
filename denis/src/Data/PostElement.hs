@@ -16,7 +16,7 @@ module Data.PostElement (
     MkElementRow,
     PostElementRow(..),
     elementsToRows
-) where 
+) where
 
 import Data.Int (Int64)
 import qualified Generics.SOP as SOP
@@ -42,8 +42,9 @@ data PostElement a = Markdown Text
     | Image Text
     | Quote PostQuote
     | Attachment Text
+    deriving (Show)
 
-instance ToJSON (PostElement t) where 
+instance ToJSON (PostElement t) where
     toJSON (Markdown m) = object ["markdown" .= m]
     toJSON (Latex l) = object ["latex" .= l]
     toJSON (Image i) = object ["image" .= i]
@@ -51,7 +52,7 @@ instance ToJSON (PostElement t) where
     toJSON (Attachment a) = object ["attachment" .= a]
 
 instance FromJSON (PostElement t) where
-    parseJSON = withObject "post element" $ \e -> 
+    parseJSON = withObject "post element" $ \e ->
         Markdown <$> e .: "markdown" <|>
         Latex <$> e .: "latex" <|>
         Image <$> e .: "image" <|>
@@ -75,7 +76,7 @@ rowsToElement :: MkElementRow (Maybe (PostElement p))
 rowsToElement (Just m) Nothing Nothing Nothing Nothing = Just $ Markdown m
 rowsToElement Nothing (Just l) Nothing Nothing Nothing = Just $ Latex l
 rowsToElement Nothing Nothing (Just i) Nothing Nothing = Just $ Image i
--- rowsToElement Nothing Nothing Nothing (Just q) Nothing = 
+-- rowsToElement Nothing Nothing Nothing (Just q) Nothing =
 --     fmap Quote $ M.lookup q pqrs >>= rowsToQuote erqs pqrs
 rowsToElement Nothing Nothing Nothing Nothing (Just a) = Just $ Attachment a
 rowsToElement _ _ _ _ _ = Nothing
@@ -98,21 +99,21 @@ elementsToRows :: Int64 -> [PostElement a] -> [PostElementRow a]
 elementsToRows pId els = map (\(el, f) -> elemenToRow f el) . zip els . map (PostElementRow pId) $ [0..]
 
 
--- -- MARK: Quote 
+-- -- MARK: Quote
 
 data PostQuote = PostQuote {
     quoteId :: Int64,
     quoteBody :: [PostElement PostQuote],
     quotePostId :: Int64
-}
+} deriving (Show)
 
 instance ToJSON PostQuote where
     toJSON (PostQuote qId pb pId) = object [
-        "id" .= qId, 
+        "id" .= qId,
         "postId" .= pId,
         "quoteBody" .= pb ]
 
-        
+
 -- -- MARK: PostQuoteRow
 
 -- data PostQuoteRow = PostQuoteRow {
@@ -122,7 +123,7 @@ instance ToJSON PostQuote where
 
 -- instance SOP.Generic PostQuoteRow
 -- instance SOP.HasDatatypeInfo PostQuoteRow
-        
+
 -- rowsToQuote :: M.Map Int64 [ElementRow PostQuote] -> M.Map Int64 PostQuoteRow -> PostQuoteRow -> Maybe PostQuote
 -- rowsToQuote erqs pqrs (PostQuoteRow qId pId) = do
 --     elementRows <- M.lookup qId erqs
