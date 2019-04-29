@@ -152,7 +152,6 @@ getPostsByIdQ pIds = case idsToColumn pIds of
             (#ids ! #id .== #posts ! #postRowId))
     Nothing -> Nothing
 
-
 type Limit = Word64
 
 isNotFalse
@@ -263,7 +262,6 @@ instance SOP.HasDatatypeInfo NamedChannelCreation
 
 addUserToChannelCreate :: UserId -> NamedChannelCreationRequest -> NamedChannelCreation
 addUserToChannelCreate uId (NamedChannelCreationRequest cName cTags cPeople) = NamedChannelCreation uId cName cTags cPeople
-
 
 data NamedChannelFull = NamedChannelFull {
     namedChannelFullId :: NamedChannelId,
@@ -418,9 +416,11 @@ instance HasUsers Post where
     userSet = Set.singleton . postAuthorId
 
 wrapIntoUsers :: r -> Set.Set UserId -> StaticPQ (Maybe (ResponseWithUsers r))
-wrapIntoUsers r us = do
-    pUsers <- getUsers $ Set.toList us
-    return $ ResponseWithUsers r . M.fromList . mapFirstBy userId <$> pUsers
+wrapIntoUsers r us
+    | Set.null us = return . Just $ ResponseWithUsers r M.empty
+    | otherwise = do
+        pUsers <- getUsers $ Set.toList us
+        return $ ResponseWithUsers r . M.fromList . mapFirstBy userId <$> pUsers
 
 liftMaybe :: Applicative f => Maybe a -> (a -> f (Maybe b)) -> f (Maybe b)
 liftMaybe Nothing _ = pure Nothing
