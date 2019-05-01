@@ -148,7 +148,7 @@ getAllUsersQ = selectStar $ from $ table #users
 getPostsByIdQ :: [PostId] -> Maybe (Query Schema '[] (RowPG PostRowResponse))
 getPostsByIdQ pIds = case idsToColumn pIds of
     Just idQ -> Just $ selectDotStar #posts $ from (subquery (idQ `As` #ids) &
-        innerJoin (subquery $ getPostQ (orderBy [#posts ! #postRowId & Desc] . orderBy [#postElements ! #rowElementOrd & Asc]) id `As` #posts)
+        innerJoin (subquery $ getPostQ (orderBy [#postElements ! #rowElementOrd & Asc] . orderBy [#posts ! #postRowId & Desc]) id `As` #posts)
             (#ids ! #id .== #posts ! #postRowId))
     Nothing -> Nothing
 
@@ -162,7 +162,7 @@ isNotFalse x = UnsafeExpression $ renderExpression x <+> "IS NOT FALSE"
 
 getLastPostsQ :: TableEndo _ _ _ _ -> Limit -> Query Schema ('Null (PG Int64) ': params) (RowPG PostRowResponse)
 getLastPostsQ te lim = getPostQ
-    (orderBy [#posts ! #postRowId & Desc] . orderBy [#postElements ! #rowElementOrd & Asc])
+    (orderBy [#postElements ! #rowElementOrd & Asc] . orderBy [#posts ! #postRowId & Desc])
     (limit lim . te . where_ (isNotFalse $ #posts ! #postRowId .< param @1) . orderBy [#posts ! #postRowId & Desc])
 
 getLastNPostsForUserQ :: Limit -> Query Schema (TuplePG (Maybe PostId, UserId)) (RowPG PostRowResponse)
@@ -234,7 +234,7 @@ getChannelPostsQ
         (RowPG PostRowResponse)
 getChannelPostsQ lim uIds tags = selectStar $ from (subquery $ postsQ' `As` #bar) &
     where_ ( isNotFalse $ #postRowId .< param @1) &
-    orderBy [#postRowId & Desc] . orderBy [#rowElementOrd & Asc] & limit lim
+    orderBy [#rowElementOrd & Asc] & limit lim . orderBy [#postRowId & Desc]
     where
         unionWithUsers = case idsToColumn uIds of
             Just uIdsQ -> selectDotStar #posts' (from $ subquery (uIdsQ `As` #uIds) &
