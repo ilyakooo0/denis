@@ -40,8 +40,8 @@ type MessagesApi =
         "leaveGroupChat" :> LeaveGroupChatDescription :> ReqBody '[JSON] GroupChatId :> PostNoContent '[JSON, FormUrlEncoded, PlainText] NoContent) :<|>
     "messages" :> "get" :> (
         "groupChat" :> MessagesGetGroupChatDesctiption :> ReqBody '[JSON] (PaginatingRequest MessageId GroupChatId) :> Post '[JSON] [Message] :<|>
-        "userChat" :> MessagesGetUserChatDesctiption :> ReqBody '[JSON] (PaginatingRequest MessageId UserId) :> Post '[JSON] [Message]) :<|>
-        "send" :> MessagesSend :> ReqBody '[JSON] MessageCreation :> Post '[JSON] MessageId
+        "userChat" :> MessagesGetUserChatDesctiption :> ReqBody '[JSON] (PaginatingRequest MessageId UserId) :> Post '[JSON] [Message] :<|>
+        "send" :> MessagesSend :> ReqBody '[JSON] MessageCreation :> Post '[JSON] MessageId)
 
 
 messagesServer :: UserId -> ServerT MessagesApi App
