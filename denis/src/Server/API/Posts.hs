@@ -34,10 +34,10 @@ getPostsApi :: [P.PostId] -> App (ResponseWithUsers [P.Post])
 getPostsApi = maybeNotFound . runQnotFound . getPosts
 
 lastPosts :: PaginatingRequest P.PostId (Maybe ()) -> App (ResponseWithUsers [P.Post])
-lastPosts (PaginatingRequest pId lim _) = maybeNotFound . runQnotFound $ getLastPosts pId lim
+lastPosts (PaginatingRequest pId lim _ dir) = maybeNotFound . runQnotFound $ getLastPosts pId lim dir
 
 getPostsForUserApi :: PaginatingRequest P.PostId UserId -> App (ResponseWithUsers [P.Post])
-getPostsForUserApi (PaginatingRequest pId lim uId) = maybeNotFound . runQnotFound $ getPostsForUser pId lim uId
+getPostsForUserApi (PaginatingRequest pId lim uId dir) = maybeNotFound . runQnotFound $ getPostsForUser pId lim dir uId
 
 publishPostApi :: UserId -> P.PostCreation -> App P.PostId
 publishPostApi uId = runQerror . publishPost uId

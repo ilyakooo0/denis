@@ -15,11 +15,14 @@ module Data.Schema (
 ) where
 
 import Squeal.PostgreSQL
+import Data.GroupChat
+import Data.PostElement
+import Data.Message
 
-type Schema = 
+type Schema =
     '[
         "users" ::: 'Table ( '[
-            "pk_users" ::: 'PrimaryKey '["userId"]] :=> 
+            "pk_users" ::: 'PrimaryKey '["userId"]] :=>
             '[
                 "userId" ::: 'Def :=> 'NotNull 'PGint8,
                 "firstName" ::: 'NoDef :=> 'NotNull 'PGtext,
@@ -36,7 +39,7 @@ type Schema =
                 "postRowTags" ::: 'NoDef :=> 'NotNull ('PGvararray ('NotNull 'PGtext))
             ]),
         "quotes" ::: 'Table (
-            '[                
+            '[
                 "pk_post_quotes" ::: 'PrimaryKey '["quoteRowId"],
                 "fk_quote_post_id" ::: 'ForeignKey '["quoteRowPostId"] "posts" '["postRowId"] ] :=>
             '[
@@ -56,7 +59,7 @@ type Schema =
                 "rowElementMarkdown" ::: 'NoDef :=> 'Null 'PGtext,
                 "rowElementLatex" ::: 'NoDef :=> 'Null 'PGtext,
                 "rowElementImage" ::: 'NoDef :=> 'Null 'PGtext,
-                "rowElementQuote" ::: 'NoDef :=> 'Null 'PGint8,                
+                "rowElementQuote" ::: 'NoDef :=> 'Null 'PGint8,
                 "rowElementAttachment" ::: 'NoDef :=> 'Null 'PGtext
             ]),
         "quoteElements" ::: 'Table (
@@ -72,22 +75,73 @@ type Schema =
                 "rowElementMarkdown" ::: 'NoDef :=> 'Null 'PGtext,
                 "rowElementLatex" ::: 'NoDef :=> 'Null 'PGtext,
                 "rowElementImage" ::: 'NoDef :=> 'Null 'PGtext,
-                "rowElementQuote" ::: 'NoDef :=> 'Null 'PGint8,                
+                "rowElementQuote" ::: 'NoDef :=> 'Null 'PGint8,
                 "rowElementAttachment" ::: 'NoDef :=> 'Null 'PGtext
             ]),
         "channels" ::: 'Table (
-            '[ 
-                "pk_channels" ::: 'PrimaryKey '["namedChannelFullId"], 
-                "fk_channels_users_id" ::: 'ForeignKey '["namedChannelFullOwner"] "users" '["userId"] 
-            ] :=> 
+            '[
+                "pk_channels" ::: 'PrimaryKey '["namedChannelFullId"],
+                "fk_channels_users_id" ::: 'ForeignKey '["namedChannelFullOwner"] "users" '["userId"]
+            ] :=>
             '[
                 "namedChannelFullId" ::: 'Def :=> 'NotNull 'PGint8,
                 "namedChannelFullOwner" ::: 'NoDef :=> 'NotNull 'PGint8,
                 "namedChannelFullName" ::: 'NoDef :=> 'NotNull 'PGtext,
                 "namedChannelFullTags" ::: 'NoDef :=> 'NotNull ('PGvararray ('NotNull 'PGtext)),
                 "namedChannelFullPeopleIds" ::: 'NoDef :=> 'NotNull ('PGvararray ('NotNull 'PGint8))
-            ]
-        )
+            ]),
+        "groupChats" ::: 'Table (
+            '[
+                "pk_group_chats" ::: 'PrimaryKey '["groupChatId"]
+            ] :=>
+            '[
+                "groupChatId" ::: 'Def :=> 'NotNull 'PGint8,
+                "groupChatUsers" ::: 'NoDef :=> 'NotNull (PG (Jsonb UserPermissions)),
+                "groupChatName" ::: 'NoDef :=> 'NotNull 'PGtext
+            ]),
+        -- "userMessages" ::: 'Table (
+        --     '[
+        --         "pk_user_messages" ::: 'PrimaryKey '["userMessageId"],
+        --         "fk_user_messages_from" ::: 'ForeignKey '["userMessageFrom"] "users" '["userId"],
+        --         "fk_user_messages_to" ::: 'ForeignKey '["userMessageTo"] "users" '["userId"]
+
+        --     ] :=>
+        --     '[
+        --         "userMessageId" ::: 'Def :=> 'NotNull 'PGint8,
+        --         "userMessageFrom" ::: 'NoDef :=> 'NotNull 'PGint8,
+        --         "userMessageTo" ::: 'NoDef :=> 'NotNull 'PGint8,
+        --         "userMessageBody" ::: 'NoDef :=> 'NotNull (PG (Jsonb (PostElement UserMessage))),
+        --         "userMessageTime" ::: 'NoDef :=> 'NotNull 'PGtimestamptz
+        --     ]),
+        -- "groupChatMessages" ::: 'Table (
+        --     '[
+        --         "pk_group_messages" ::: 'PrimaryKey '["groupChatMessageId"],
+        --         "fk_group_messages_group" ::: 'ForeignKey '["groupChatMessageGroupChatId"] "groupChats" '["groupChatId"],
+        --         "fk_group_messages_author" ::: 'ForeignKey '["groupChatMessageAuthorId"] "users" '["userId"]
+        --     ] :=>
+        --     '[
+        --         "groupChatMessageId" ::: 'Def :=> 'NotNull 'PGint8,
+        --         "groupChatMessageGroupChatId" ::: 'NoDef :=> 'NotNull 'PGint8,
+        --         "groupChatMessageAuthorId" ::: 'NoDef :=> 'NotNull 'PGint8,
+        --         "groupChatMessageBody" ::: 'NoDef :=> 'NotNull (PG (Jsonb (PostElement GroupChatMessage))),
+        --         "groupChatMessageTime" ::: 'NoDef :=> 'NotNull 'PGtimestamptz
+        --     ])
+        "messages" ::: 'Table (
+            '[
+                "pk_messages" ::: 'PrimaryKey '["messageStorageId"],
+                "fk_messages_author" ::: 'ForeignKey '["messageStorageAuthorId"] "users" '["userId"],
+                "fk_messages_group" ::: 'ForeignKey '["messageStorageDestinationGroupId"] "groupChats" '["groupChatId"],
+                "fk_messages_to_user" ::: 'ForeignKey '["messageStorageDestinationUserId"] "users" '["userId"]
+            ] :=>
+            '[
+                "messageStorageId" ::: 'Def :=> 'NotNull 'PGint8,
+                "messageStorageAuthorId" ::: 'NoDef :=> 'NotNull 'PGint8,
+                "messageStorageDestinationGroupId" ::: 'NoDef :=> 'Null 'PGint8,
+                "messageStorageDestinationUserId" ::: 'NoDef :=> 'Null 'PGint8,
+                "messageStorageBody" ::: 'NoDef :=> 'NotNull (PG (Jsonb (PostElement Message))),
+                "messageStorageTime" ::: 'NoDef :=> 'NotNull 'PGtimestamptz
+            ])
+
         -- "postsView" ::: 'View (RowPG PostRowResponse)
             -- ('[
             --     "postRowId" ::: 'NotNull 'PGint8,
@@ -97,16 +151,16 @@ type Schema =
             --     "rowElementMarkdown" ::: 'Null 'PGtext,
             --     "rowElementLatex" ::: 'Null 'PGtext,
             --     "rowElementImage" ::: 'Null 'PGtext,
-            --     "rowElementQuote" ::: 'Null 'PGint8,    
+            --     "rowElementQuote" ::: 'Null 'PGint8,
             --     "rowElementAttachment" ::: 'Null 'PGtext
             -- ])
-            
+
     ]
-    
+
 
 createTables :: Definition '[] Schema
 createTables = createTable #users (
-        serial8 `as` #userId :* 
+        serial8 `as` #userId :*
         notNullable text `as` #firstName :*
         notNullable text `as` #middleName :*
         notNullable text `as` #lastName
@@ -119,13 +173,13 @@ createTables = createTable #users (
         notNullable (vararray text) `as` #postRowTags
         ) (
             primaryKey #postRowId `as` #pk_posts :*
-            foreignKey #postRowAuthorId #users #userId OnDeleteCascade OnUpdateCascade `as` #fk_author_id 
+            foreignKey #postRowAuthorId #users #userId OnDeleteCascade OnUpdateCascade `as` #fk_author_id
     ) >>> createTable #quotes (
         serial8 `as` #quoteRowId :*
         notNullable int8 `as` #quoteRowPostId
         ) (
             primaryKey #quoteRowId `as` #pk_post_quotes :*
-            foreignKey #quoteRowPostId #posts #postRowId OnDeleteCascade OnUpdateCascade `as` #fk_quote_post_id 
+            foreignKey #quoteRowPostId #posts #postRowId OnDeleteCascade OnUpdateCascade `as` #fk_quote_post_id
     ) >>> createTable #postElements (
         notNullable int8 `as` #rowElementId :*
         notNullable int8 `as` #rowElementOrd :*
@@ -136,7 +190,7 @@ createTables = createTable #users (
         nullable text `as` #rowElementAttachment
         ) (
             foreignKey #rowElementId #posts #postRowId OnDeleteCascade OnUpdateCascade `as` #fk_post_quote_self_id :*
-            foreignKey #rowElementQuote #quotes #quoteRowId OnDeleteCascade OnUpdateCascade `as` #fk_post_quote_id 
+            foreignKey #rowElementQuote #quotes #quoteRowId OnDeleteCascade OnUpdateCascade `as` #fk_post_quote_id
     ) >>> createTable #quoteElements (
         notNullable int8 `as` #rowElementId :*
         notNullable int8 `as` #rowElementOrd :*
@@ -147,7 +201,7 @@ createTables = createTable #users (
         nullable text `as` #rowElementAttachment
         ) (
             foreignKey #rowElementId #quotes #quoteRowId OnDeleteCascade OnUpdateCascade `as` #fk_quotes_quote_self_id :*
-            foreignKey #rowElementQuote #quotes #quoteRowId OnDeleteCascade OnUpdateCascade `as` #fk_quote_quote_id 
+            foreignKey #rowElementQuote #quotes #quoteRowId OnDeleteCascade OnUpdateCascade `as` #fk_quote_quote_id
     ) >>> createTable #channels (
         serial8 `as` #namedChannelFullId :*
         notNullable int8 `as` #namedChannelFullOwner :*
@@ -156,7 +210,7 @@ createTables = createTable #users (
         notNullable (vararray int8) `as` #namedChannelFullPeopleIds
         ) (
             primaryKey #namedChannelFullId `as` #pk_channels :*
-            foreignKey #namedChannelFullOwner #users #userId OnDeleteCascade OnUpdateCascade `as` #fk_channels_users_id 
+            foreignKey #namedChannelFullOwner #users #userId OnDeleteCascade OnUpdateCascade `as` #fk_channels_users_id
     -- ) >>> createView #postsView (select (
     --     #posts ! #postRowId :*
     --     #posts ! #postRowAuthorId :*
@@ -168,9 +222,27 @@ createTables = createTable #users (
     --     #postElements ! #rowElementQuote :*
     --     #postElements ! #rowElementAttachment
     --     ) (
-    --     from ((table #posts) & 
+    --     from ((table #posts) &
     --         (innerJoin (table #postElements)
     --             (#posts ! #postRowId .== #postElements ! #rowElementId))))
+    ) >>> createTable #groupChats (
+        serial8 `as` #groupChatId :*
+        notNullable jsonb `as` #groupChatUsers :*
+        notNullable text `as` #groupChatName
+        ) (
+            primaryKey #groupChatId `as` #pk_group_chats
+    ) >>> createTable #messages (
+        serial8 `as` #messageStorageId :*
+        notNullable int8 `as` #messageStorageAuthorId :*
+        nullable int8 `as` #messageStorageDestinationGroupId :*
+        nullable int8 `as` #messageStorageDestinationUserId :*
+        notNullable jsonb `as` #messageStorageBody :*
+        notNullable timestampWithTimeZone `as` #messageStorageTime
+        ) (
+            primaryKey #messageStorageId `as` #pk_messages :*
+            foreignKey #messageStorageAuthorId #users #userId OnDeleteCascade OnUpdateCascade `as` #fk_messages_author :*
+            foreignKey #messageStorageDestinationGroupId #groupChats #groupChatId OnDeleteCascade OnUpdateCascade `as` #fk_messages_group :*
+            foreignKey #messageStorageDestinationUserId #users #userId OnDeleteCascade OnUpdateCascade `as` #fk_messages_to_user
     )
 -- quoteUniquenessCheck :: TableConstraintExpression Schema _ (Check '["rowElementOrd", "rowElementMarkdown", "rowElementLatex", "rowElementImage", "rowElementQuote", "rowElementAttachment"])
 -- quoteUniquenessCheck = check (#rowElementOrd :* #rowElementMarkdown :* #rowElementLatex :* #rowElementImage :* #rowElementQuote :* #rowElementAttachment) $

@@ -39,10 +39,10 @@ getChannelsApi :: UserId -> App [NamedChannel UserId]
 getChannelsApi uId = runQnotFound $ getAllChannels uId
 
 getAnonymousChannelsApi :: PaginatingRequest P.PostId AnonymousChannel -> App (ResponseWithUsers [P.Post])
-getAnonymousChannelsApi (PaginatingRequest pId lim req) = runQnotFound $ getAnonymousChannelPosts pId lim req
+getAnonymousChannelsApi (PaginatingRequest pId lim req dir) = runQnotFound $ getAnonymousChannelPosts pId lim dir req
 
 getChannel :: UserId -> PaginatingRequest P.PostId NamedChannelId -> App (ResponseWithUsers [P.Post])
-getChannel uId (PaginatingRequest pId lim cId) = runQnotFound $ getChannelPosts uId pId lim cId
+getChannel uId (PaginatingRequest pId lim cId dir) = runQnotFound $ getChannelPosts uId pId lim dir cId
 
 createChannelApi :: UserId -> NamedChannelCreationRequest -> App NamedChannelId
 createChannelApi uId req = maybeNotFound . runQnotFound $ createNewChannel uId req

@@ -28,6 +28,7 @@ import Server.API.Channels
 import Control.Lens
 import Server.Query.ComplexQuery
 import Server.API.Completions
+import Server.API.Messages
 
 -- MARK: Documentation
 
@@ -48,7 +49,8 @@ type API =
             "users" :> ReqBody '[JSON] [UserId] :> Post '[JSON] [User] :<|>
             "users" :> "all" :> Post '[JSON] [User] :<|>
             "posts" :> PostApi :<|>
-            "channels" :> ChannelsApi
+            "channels" :> ChannelsApi :<|>
+            MessagesApi
             ) :<|>
         CompletionsAPI
 
@@ -63,6 +65,7 @@ mkServerAPI l =
         maybeNotFound . runQnotFound . getUsers :<|>
         runQnotFound getAllUsers :<|>
         postApi uId :<|>
-        channelsApi uId
+        channelsApi uId :<|>
+        messagesServer uId
         ) :<|>
         completionServer

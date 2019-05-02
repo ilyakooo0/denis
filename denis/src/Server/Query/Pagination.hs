@@ -12,23 +12,36 @@
     UndecidableSuperClasses #-}
 
 module Server.Query.Pagination (
-    PaginatingRequest(..)
+    PaginatingRequest(..),
+    PaginationDirection(..)
     ) where
 
-import Data.Query
 import GHC.Generics
-import Data.Aeson
+import Data.Aeson as A
 import Servant.Docs
 import Data.Proxy
+import Data.Word (Word64)
 
 instance (ToSample i, ToSample r) => ToSample (PaginatingRequest i r) where
-    toSamples _ = samples $ PaginatingRequest <$> ([const Nothing, Just] <*> [snd . head $ toSamples Proxy]) <*> [20] <*> map snd (toSamples Proxy)
+    toSamples _ = samples $ PaginatingRequest <$> ([const Nothing, Just] <*> [snd . head $ toSamples Proxy]) <*> [20] <*> map snd (toSamples Proxy) <*> [BackPagination, ForwardPagination]
 
 data PaginatingRequest i r = PaginatingRequest {
     exclusiveFrom :: Maybe i,
-    limit :: Limit,
-    request :: r
+    limit :: Word64,
+    request :: r,
+    direction :: PaginationDirection
 } deriving (Generic)
 
 instance (ToJSON r, ToJSON i) => ToJSON (PaginatingRequest i r) where
 instance (FromJSON r, FromJSON i) => FromJSON (PaginatingRequest i r) where
+
+data PaginationDirection = BackPagination | ForwardPagination
+
+instance ToJSON PaginationDirection where
+    toJSON BackPagination = A.String "backward"
+    toJSON ForwardPagination = A.String "forward"
+
+instance FromJSON PaginationDirection where
+    parseJSON (A.String "backward") = return BackPagination
+    parseJSON (A.String "forward") = return ForwardPagination
+    parseJSON _ = fail "couldn't match magination direction."

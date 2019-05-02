@@ -24,13 +24,14 @@ import Data.Aeson
 import qualified Data.Text.IO as T
 import Servant.Server.Experimental.Auth
 import Network.Wai
-
+import Server.API.Messages
 
 docsWriter :: HasDocs api => String -> Proxy api -> IO ()
 docsWriter file = writeFile ("docs/" ++ file ++ ".md") . normalizer . markdown . docs
 
 main = do
     docsWriter "posts" $ pretty (Proxy :: Proxy ("posts" :> PostApi))
+    docsWriter "messages" $ pretty (Proxy :: Proxy (MessagesApi))
     docsWriter "all" $ pretty serverProxy
     docsWriter "authentication" $ pretty (Proxy :: Proxy ("authentication" :> AuthenticationHandler :<|>
         Authentication :> "authentication" :> "me" :> Post '[JSON] UserId ))

@@ -10,11 +10,11 @@
 
 
 module Data.PostElement (
-    PostElement,
     elemenToRow,
     rowsToElement,
     MkElementRow,
     PostElementRow(..),
+    PostElement(..),
     elementsToRows
 ) where
 
