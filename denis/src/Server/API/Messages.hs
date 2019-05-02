@@ -38,9 +38,10 @@ type MessagesApi =
         "updateGroupChat" :> GetUpdateGroupChatDescription :> ReqBody '[JSON] GroupChat :> PostNoContent '[JSON, FormUrlEncoded, PlainText] NoContent :<|>
         "createGroupChat" :> CreateGroupChatDescription :> ReqBody '[JSON] GroupChatCreation :> Post '[JSON] GroupChatId :<|>
         "leaveGroupChat" :> LeaveGroupChatDescription :> ReqBody '[JSON] GroupChatId :> PostNoContent '[JSON, FormUrlEncoded, PlainText] NoContent) :<|>
-    "messages" :> "get" :> (
-        "groupChat" :> MessagesGetGroupChatDesctiption :> ReqBody '[JSON] (PaginatingRequest MessageId GroupChatId) :> Post '[JSON] [Message] :<|>
-        "userChat" :> MessagesGetUserChatDesctiption :> ReqBody '[JSON] (PaginatingRequest MessageId UserId) :> Post '[JSON] [Message] :<|>
+    "messages" :> (
+        ("get" :>
+            "groupChat" :> MessagesGetGroupChatDesctiption :> ReqBody '[JSON] (PaginatingRequest MessageId GroupChatId) :> Post '[JSON] [Message] :<|>
+            "userChat" :> MessagesGetUserChatDesctiption :> ReqBody '[JSON] (PaginatingRequest MessageId UserId) :> Post '[JSON] [Message]) :<|>
         "send" :> MessagesSend :> ReqBody '[JSON] MessageCreation :> Post '[JSON] MessageId)
 
 
