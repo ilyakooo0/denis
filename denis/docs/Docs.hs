@@ -26,16 +26,18 @@ import Servant.Server.Experimental.Auth
 import Network.Wai
 import Server.API.Messages
 
+docsWriterLong :: HasDocs api => String -> Proxy api -> IO ()
+docsWriterLong file = writeFile ("docs/" ++ file ++ ".md") . normalizer . markdown . flip docsWithOptions (DocOptions 15)
 docsWriter :: HasDocs api => String -> Proxy api -> IO ()
 docsWriter file = writeFile ("docs/" ++ file ++ ".md") . normalizer . markdown . docs
 
 main = do
-    docsWriter "posts" $ pretty (Proxy :: Proxy ("posts" :> PostApi))
-    docsWriter "messages" $ pretty (Proxy :: Proxy (MessagesApi))
+    docsWriterLong "posts" $ pretty (Proxy :: Proxy ("posts" :> PostApi))
+    docsWriterLong "messages" $ pretty (Proxy :: Proxy (MessagesApi))
     docsWriter "all" $ pretty serverProxy
-    docsWriter "authentication" $ pretty (Proxy :: Proxy ("authentication" :> AuthenticationHandler :<|>
+    docsWriterLong "authentication" $ pretty (Proxy :: Proxy ("authentication" :> AuthenticationHandler :<|>
         Authentication :> "authentication" :> "me" :> Post '[JSON] UserId ))
-    docsWriter "channels" $ pretty (Proxy :: Proxy ("channels" :> ChannelsApi))
+    docsWriterLong "channels" $ pretty (Proxy :: Proxy ("channels" :> ChannelsApi))
     T.writeFile ("docs/Home.md") . (\t -> "```\n" <> t <> "```\n") $ layoutWithContext serverProxy (undefined :: Context (AuthHandler Request UserId ': '[]))
 
 

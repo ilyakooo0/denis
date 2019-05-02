@@ -110,8 +110,10 @@ storeMessage (Message mId aId dId pb mt) = case dId of
     UserChatDestination uId -> MessageStorage mId aId Nothing (Just uId) (Jsonb pb) mt
 
 instance ToSample MessageCreation where
-    toSamples _ = samples $ MessageCreation Nothing (Just 69) <$>
-        map (Jsonb . snd) (toSamples Proxy)
+    toSamples _ = samples $ (MessageCreation Nothing (Just 69) <$>
+        map (Jsonb . snd) (toSamples Proxy)) <>
+        (MessageCreation (Just 5) Nothing <$>
+        map (Jsonb . snd) (toSamples Proxy))
 
 data MessageCreation = MessageCreation {
     messageCreationDestinationGroupId :: Maybe GroupChatId,
