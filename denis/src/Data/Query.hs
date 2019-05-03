@@ -343,7 +343,7 @@ getChatsQ lim (.^) = select (
             (table #groupChats)
             (#groupChats ! #groupChatId .== #chats ! #messageGroupId)) &
         where_ (isNull (#groupChats ! #groupChatUsers) .||
-            isNotNull (#groupChats ! #groupChatUsers .-> param @2)) &
+            (#groupChats ! #groupChatUsers .? param @2)) &
         where_ (isNotFalse $ #chats ! #messageId .^ param @3) &
         orderBy [#chats ! #messageId & Desc] &
         limit lim
@@ -414,7 +414,7 @@ getGroupChatForUserQ :: Query Schema (TuplePG (String, GroupChatId)) (RowPG Grou
 getGroupChatForUserQ = selectStar $
     (from (table #groupChats)) &
     where_ (#groupChatId .== param @2) &
-    where_ (isNotNull $ #groupChatUsers .-> param @1)
+    where_ (#groupChatUsers .? param @1)
 
 
 -- MARK: FrontEnd Data Structures
