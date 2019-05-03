@@ -22,8 +22,8 @@ import Servant.Docs
 import Data.Proxy
 
 instance ToSample Dialog where
-    toSamples _ = samples ((GroupDialog <$> map snd (toSamples Proxy) <*> map snd (toSamples Proxy)) <>
-        (UserDialog <$> [69] <*> map snd (toSamples Proxy)))
+    toSamples _ = samples (take 1 (UserDialog <$> [69] <*> map snd (toSamples Proxy)) <>
+        (GroupDialog <$> map snd (toSamples Proxy) <*> map snd (toSamples Proxy)))
 
 data Dialog = GroupDialog GroupChat Message | UserDialog UserId Message
     deriving Show
