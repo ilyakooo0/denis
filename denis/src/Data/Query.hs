@@ -176,15 +176,20 @@ isNotFalse x = UnsafeExpression $ renderExpression x <+> "IS NOT FALSE"
 getLastPostsQ
     :: TableEndo _ _ _ _
     -> Limit
-    -> ConditionOp Schema _ _ _ _ _ _
+    -> P.PaginationDirection
     -> Query Schema ('Null (PG Int64) ': params) (RowPG PostRowResponse)
-getLastPostsQ te lim (.^) = getPostQ
-    (orderBy [#postElements ! #rowElementOrd & Asc] . orderBy [#posts ! #postRowId & Desc])
-    (limit lim . te . where_ (isNotFalse $ #posts ! #postRowId .^ param @1) . orderBy [#posts ! #postRowId & Desc])
+getLastPostsQ te lim dir = getPostQ
+    (orderBy [#postElements ! #rowElementId & Desc, #postElements ! #rowElementOrd & Asc])
+    (limit lim .
+        te .
+        where_ (ifThenElse (isNull $ param @1) true $ #posts ! #postRowId .^ param @1) .
+        orderBy [#posts ! #postRowId & order])
+    where
+        ((.^), order) = directionToOperator dir
 
 getLastNPostsForUserQ
     :: Limit
-    -> ConditionOp Schema _ _ _ _ _ _
+    -> P.PaginationDirection
     -> Query Schema (TuplePG (Maybe PostId, UserId)) (RowPG PostRowResponse)
 getLastNPostsForUserQ = getLastPostsQ $ where_ (#posts ! #postRowAuthorId .== param @2)
 
@@ -246,24 +251,21 @@ updateNamedChannelQ = update_ #channels
 
 getChannelPostsQ
     :: Limit
-    -> ConditionOp Schema _ _ _ _ _ _
+    -> P.PaginationDirection
     -> [UserId]
     -> Vector Text
     -> Query
         Schema
         (TuplePG (Only (Maybe PostId))) -- ^ post id from which to start
         (RowPG PostRowResponse)
-getChannelPostsQ lim (.^) uIds tags = selectStar $ from (subquery $ postsQ' `As` #bar) &
-    where_ (isNotFalse $ #postRowId .^ param @1) &
-    orderBy [#rowElementOrd & Asc] & limit lim . orderBy [#postRowId & Desc]
+getChannelPostsQ lim dir uIds tags = getLastPostsQ
+        (where_ $ jsonbLit tags .?| #postRowTags .|| isUser #postRowAuthorId)
+        lim
+        dir
     where
-        unionWithUsers = case idsToColumn uIds of
-            Just uIdsQ -> selectDotStar #posts' (from $ subquery (uIdsQ `As` #uIds) &
-                    innerJoin (subquery $ getPostQ id id `As` #posts')
-                        (#uIds ! #id .== #posts' ! #postRowAuthorId)) &
-                    union
-            Nothing -> id
-        postsQ' = unionWithUsers $ getPostQ id $ where_ $ jsonbLit tags .?| #postRowTags
+        isUser = case idsToColumn uIds of
+            Just uIdsQ -> (`in_` uIdsQ)
+            Nothing -> const $ false
 
 getTagsQ :: Query Schema '[] (RowPG (Only String))
 getTagsQ = selectDistinct (unsafeFunction "unnest" #postRowTags `as` #fromOnly) $
@@ -323,9 +325,9 @@ type ChatQueryParams = TuplePG
 
 getChatsQ
     :: Limit
-    -> ConditionOp Schema _ _ _ _ _ _
+    -> P.PaginationDirection
     -> Query Schema ChatQueryParams (RowPG ChatsResponse)
-getChatsQ lim (.^) = select (
+getChatsQ lim dir = select (
         #chats ! #messageId `as` #chatResponseMessageId :*
         #messages ! #messageStorageAuthorId `as` #chatResponseMessageAuthorId :*
         #messages ! #messageStorageDestinationGroupId `as` #chatResponseMessageDestinationGroupId :*
@@ -345,9 +347,11 @@ getChatsQ lim (.^) = select (
         where_ (isNull (#groupChats ! #groupChatUsers) .||
             (#groupChats ! #groupChatUsers .? param @2)) &
         where_ (isNotFalse $ #chats ! #messageId .^ param @3) &
-        orderBy [#chats ! #messageId & Desc] &
-        limit lim
+        orderBy [#chats ! #messageId & order] &
+        limit lim &
+        orderBy [#chats ! #messageId & Desc]
     where
+        ((.^), order) = directionToOperator dir
         chatsQ :: Query Schema _ ChatsQueryResponse
         chatsQ = unionAll groupChats userChats
             where
@@ -381,33 +385,39 @@ getChatsQ lim (.^) = select (
 
 getMessagesQ
     :: Limit
-    -> ConditionOp Schema _ _ _ _ _ _
+    -> P.PaginationDirection
     -> Query Schema (TuplePG
     ( UserId
     , UserId
     , Maybe MessageId
     )) (RowPG MessageStorage)
-getMessagesQ lim (.^) = selectStar (from (table #messages) &
+getMessagesQ lim dir = selectStar (from (table #messages) &
     where_ (isNotNull #messageStorageDestinationUserId .&&
         ((#messageStorageAuthorId .== param @1 .&& #messageStorageDestinationUserId .== param @2) .||
         (#messageStorageDestinationUserId .== param @1 .&& #messageStorageAuthorId .== param @2))) &
         where_ (isNotFalse $ #messageStorageId .^ param @3) &
-        orderBy [#messageStorageId & Desc] &
-        limit lim)
+        orderBy [#messageStorageId & order] &
+        limit lim &
+        orderBy [#messageStorageId & Desc])
+    where
+        ((.^), order) = directionToOperator dir
 
 getGroupMessagesQ
     :: Limit
-    -> ConditionOp Schema _ _ _ _ _ _
+    -> P.PaginationDirection
     -> Query Schema (TuplePG
     ( GroupChatId
     , Maybe MessageId
     )) (RowPG MessageStorage)
-getGroupMessagesQ lim (.^) = selectStar (from (table #messages) &
+getGroupMessagesQ lim dir = selectStar (from (table #messages) &
     where_ (isNotNull #messageStorageDestinationGroupId .&&
         (#messageStorageDestinationGroupId .== param @1)) &
         where_ (isNotFalse $ #messageStorageId .^ param @2) &
-        orderBy [#messageStorageId & Desc] &
-        limit lim)
+        orderBy [#messageStorageId & order] &
+        limit lim &
+        orderBy [#messageStorageId & Desc])
+    where
+        ((.^), order) = directionToOperator dir
 
 -- String -- user id as String
 getGroupChatForUserQ :: Query Schema (TuplePG (String, GroupChatId)) (RowPG GroupChat)
@@ -473,7 +483,7 @@ getPostsForUser
     -> UserId
     -> StaticPQ (Maybe (ResponseWithUsers [Post]))
 getPostsForUser pId lim dir uId = do
-    postRows <- runQueryParams (getLastNPostsForUserQ lim $ directionToOperator dir) (pId, uId) >>= getRows
+    postRows <- runQueryParams (getLastNPostsForUserQ lim dir) (pId, uId) >>= getRows
     wrapIntoResponse (fromMaybe [] . rowsToPosts $ postRows)
 
 getPosts :: [PostId] -> StaticPQ (Maybe (ResponseWithUsers [Post]))
@@ -490,7 +500,7 @@ getLastPosts
     -> P.PaginationDirection
     -> StaticPQ (Maybe (ResponseWithUsers [Post]))
 getLastPosts pId lim dir = do
-    postRows <- runQueryParams (getLastPostsQ id lim $ directionToOperator dir) (Only pId) >>= getRows
+    postRows <- runQueryParams (getLastPostsQ id lim dir) (Only pId) >>= getRows
     rowsToPosts postRows `liftMaybe` wrapIntoResponse
 
 getUser :: UserId -> StaticPQ User
@@ -535,7 +545,7 @@ getChannelPosts uId pId lim dir cId = do
     channel <- getChannelForUser uId cId
     postRows <- runQueryParams (getChannelPostsQ
                 lim
-                (directionToOperator dir)
+                dir
                 (toList $ namedChannelFullPeopleIds channel)
                 (namedChannelFullTags channel))
             (Only pId)
@@ -549,7 +559,7 @@ getAnonymousChannelPosts
     -> AnonymousChannel
     -> StaticPQ (ResponseWithUsers [Post])
 getAnonymousChannelPosts pId lim dir (AnonymousChannel tags people) = do
-    postRows <- runQueryParams (getChannelPostsQ lim (directionToOperator dir) people tags) (Only pId) >>= getRows
+    postRows <- runQueryParams (getChannelPostsQ lim dir people tags) (Only pId) >>= getRows
     fmap (fromMaybe $ ResponseWithUsers mempty mempty) $ rowsToPosts postRows `liftMaybe` wrapIntoResponse
 
 getAllChannels :: UserId -> StaticPQ [NamedChannel UserId]
@@ -572,7 +582,7 @@ getDialogs
     -> P.PaginationDirection
     -> StaticPQ (ResponseWithUsers [Dialog])
 getDialogs uId mId lim dir = do
-    resp <- runQueryParams (getChatsQ lim $ directionToOperator dir) (uId, Just $ show uId, mId) >>= getRows
+    resp <- runQueryParams (getChatsQ lim dir) (uId, Just $ show uId, mId) >>= getRows
     (>>= fromMaybe500) $ (responseToDialogs uId resp `liftMaybe` wrapIntoResponse)
 
 getMessagesInUserChat
@@ -583,7 +593,7 @@ getMessagesInUserChat
     -> P.PaginationDirection
     -> StaticPQ [Message]
 getMessagesInUserChat selfId uId mId lim dir = do
-    resp <- runQueryParams (getMessagesQ lim $ directionToOperator dir) (selfId, uId, mId) >>= getRows
+    resp <- runQueryParams (getMessagesQ lim dir) (selfId, uId, mId) >>= getRows
     fromMaybe500 . sequence . map restoreMessage $ resp
 
 getMessagesInGroupChat
@@ -595,7 +605,7 @@ getMessagesInGroupChat
     -> StaticPQ [Message]
 getMessagesInGroupChat selfId gId mId lim dir = do
     _ <- getGroupChatForUser selfId gId
-    resp <- runQueryParams (getGroupMessagesQ lim $ directionToOperator dir) (gId, mId) >>= getRows
+    resp <- runQueryParams (getGroupMessagesQ lim dir) (gId, mId) >>= getRows
     (return . sequence . map restoreMessage $ resp) >>= fromMaybe500
 
 sendMessage :: UserId -> MessageCreation -> StaticPQ MessageId
@@ -645,9 +655,10 @@ getGroupChatForUser uId gId = do
 
 directionToOperator
     :: P.PaginationDirection
-    -> ConditionOp schema from grouping params nullity0 nullity1 (ty :: PGType)
-directionToOperator P.BackPagination = (.<)
-directionToOperator P.ForwardPagination = (.>)
+    -> (ConditionOp schema0 from0 grouping0 params0 nullity0 nullity1 (ty :: PGType),
+        (Expression schema2 from2 grouping2 params2 _ -> SortExpression schema2 from2 grouping2 params2))
+directionToOperator P.BackPagination = ((.<), Desc)
+directionToOperator P.ForwardPagination = ((.>), Asc)
 
 foldMaybe :: [Maybe a] -> Maybe [a]
 foldMaybe [] = Just []
