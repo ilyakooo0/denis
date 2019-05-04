@@ -4,19 +4,25 @@
     OverloadedLabels,
     OverloadedStrings ,
     TypeApplications ,
-    TypeOperators #-}
+    TypeOperators,
+    LambdaCase #-}
 
 module Server.API.Completions (
-    CompletionsAPI,
-    completionServer
+    TagsAPI,
+    tagsServer
     ) where
 
 import Servant.Server
 import Servant
-import Data.Completions
+import Data.Tags.Completions
 import Server.App
 import Data.Connection
 import Data.Query
+import qualified Data.Text as T
+import qualified Data.Post as P
+import Data.PostElement
+import Data.Tags.Suggestions
+import Data.List
 
 type CompletionsDescription = Description "\
     \Gets tag completion tree\n\n\
@@ -57,10 +63,18 @@ type CompletionsDescription = Description "\
     \}\n\
     \```"
 
-type CompletionsAPI = "tagCompletions" :> CompletionsDescription :> Get '[JSON] (CompletionTree Char)
+type SuggestionDescription = Description "Retuens suggested tags for given post element objects."
 
-completionServer :: ServerT CompletionsAPI App
-completionServer = completionHandler
+type TagsAPI = "completions" :> CompletionsDescription :> Get '[JSON] (CompletionTree Char)
+    :<|> "suggest" :> SuggestionDescription :> ReqBody '[JSON] [PostElement P.Post] :> Post '[JSON] [T.Text]
 
-completionHandler :: ServerT CompletionsAPI App
+tagsServer :: ServerT TagsAPI App
+tagsServer = completionHandler :<|> suggestionHandler
+
+completionHandler :: App (CompletionTree Char)
 completionHandler = runQerror $ mkCompletionTree <$> getTags
+
+suggestionHandler :: [PostElement P.Post] -> App [T.Text]
+suggestionHandler = return . suggestTags . T.concat . intersperse " " . concatMap (\case
+    Markdown t -> T.words t
+    _ -> [])

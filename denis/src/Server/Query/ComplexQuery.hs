@@ -50,8 +50,8 @@ instance (HasDocs api) => HasDocs (ComplexQuery :> api) where
 instance {-# Overlapping #-} ToSample [ComplexQueryRequest] where
     toSamples _ = singleSample $ [ComplexQueryRequest "channels/" "", ComplexQueryRequest "posts/last" "3"]
 
-instance {-# Overlapping #-} ToSample [T.Text] where
-    toSamples _ = singleSample ["[{\"people\":[1],\"name\":\"newChannelName\",\"id\":7,\"tags\":[]},{\"people\":[1],\"name\":\"newChannelName\",\"id\":6,\"tags\":[]},{\"people\":[1],\"name\":\"newChannelName\",\"id\":5,\"tags\":[]},{\"people\":[1,1,2,2,2],\"name\":\"sssss\",\"id\":4,\"tags\":[\"thisIsHashTag\",\"thisIsHashTag\",\"thisIsHashTag\",\"thisIsHashTag\",\"thisIsAlsoHashTag\",\"cs\"]},{\"people\":[1,7,2,19],\"name\":\"соытвототтоциология\",\"id\":1,\"tags\":[\"sos\"]}]","{\"users\":{\"1\":{\"middleName\":\"FirstUser\",\"lastName\":\"FirstUser\",\"firstName\":\"FirstUser\",\"id\":1}},\"response\":[{\"body\":[{\"markdown\":\"hello\"}],\"authorId\":1,\"id\":28,\"updated\":\"2019-04-13T16:14:38.495832Z\",\"tags\":[]},{\"body\":[{\"markdown\":\"Hello, blyat\"}],\"authorId\":1,\"id\":27,\"updated\":\"2005-01-03T12:34:56Z\",\"tags\":[]}]}"]
+instance {-# Overlapping #-} ToSample [ComplexQueryRepsonse] where
+    toSamples _ = singleSample $ map ComplexQueryRepsonse ["[{\"people\":[1],\"name\":\"newChannelName\",\"id\":7,\"tags\":[]},{\"people\":[1],\"name\":\"newChannelName\",\"id\":6,\"tags\":[]},{\"people\":[1],\"name\":\"newChannelName\",\"id\":5,\"tags\":[]},{\"people\":[1,1,2,2,2],\"name\":\"sssss\",\"id\":4,\"tags\":[\"thisIsHashTag\",\"thisIsHashTag\",\"thisIsHashTag\",\"thisIsHashTag\",\"thisIsAlsoHashTag\",\"cs\"]},{\"people\":[1,7,2,19],\"name\":\"соытвототтоциология\",\"id\":1,\"tags\":[\"sos\"]}]","{\"users\":{\"1\":{\"middleName\":\"FirstUser\",\"lastName\":\"FirstUser\",\"firstName\":\"FirstUser\",\"id\":1}},\"response\":[{\"body\":[{\"markdown\":\"hello\"}],\"authorId\":1,\"id\":28,\"updated\":\"2019-04-13T16:14:38.495832Z\",\"tags\":[]},{\"body\":[{\"markdown\":\"Hello, blyat\"}],\"authorId\":1,\"id\":27,\"updated\":\"2005-01-03T12:34:56Z\",\"tags\":[]}]}"]
 
 -- MARK: Implementation
 
@@ -66,7 +66,10 @@ data ComplexQueryRequest = ComplexQueryRequest {
 instance ToJSON ComplexQueryRequest
 instance FromJSON ComplexQueryRequest
 
-type ComplexQueryRepsonse = T.Text
+newtype ComplexQueryRepsonse = ComplexQueryRepsonse {responseText :: T.Text}
+
+instance ToJSON ComplexQueryRepsonse where
+    toJSON = toJSON . responseText
 
 type ComplexQueryDescription = Description "Complex query\n\nAllows you to query several endpoints within one request.\n\nResponses are returned in the same order as the requests are sent.\n\nThe order of query execution is not determined. If one of the queries returns a non-2XX response, the first such response is returned.\n\n## Do not perform modifications in this query. You will have no way of telling whether it succeeded."
 
@@ -92,7 +95,7 @@ instance HasServer api context => HasServer (ComplexQuery :> api :: *) context w
                     result <- liftIO $ readTVarIO responses
                     case result of
                         Left err -> throwError err
-                        Right resp -> sequence . map (throwMaybe . flip M.lookup resp) $ [0..((length query) - 1)]
+                        Right resp -> sequence . map (fmap ComplexQueryRepsonse . throwMaybe . flip M.lookup resp) $ [0..((length query) - 1)]
                 where
                     serverRest = runRouterEnv (route (Proxy :: Proxy api) context subserver) env
                     respond :: TVar (Either ServantErr (M.Map Int T.Text)) -> Int -> RouteResult Response -> IO ResponseReceived

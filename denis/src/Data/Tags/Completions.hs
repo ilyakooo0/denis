@@ -4,7 +4,7 @@
     FlexibleInstances #-}
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
-module Data.Completions (
+module Data.Tags.Completions (
     CompletionTree(..),
     mkCompletionTree
     ) where

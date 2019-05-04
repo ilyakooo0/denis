@@ -52,7 +52,7 @@ type API =
             "channels" :> ChannelsApi :<|>
             MessagesApi
             ) :<|>
-        CompletionsAPI
+        "tags" :> TagsAPI
 
 serverProxy :: Proxy API
 serverProxy = Proxy
@@ -68,4 +68,4 @@ mkServerAPI l =
         channelsApi uId :<|>
         messagesServer uId
         ) :<|>
-        completionServer
+        tagsServer
