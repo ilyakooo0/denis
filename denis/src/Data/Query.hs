@@ -161,7 +161,8 @@ getAllUsersQ = selectStar $ from $ table #users
 getPostsByIdQ :: [PostId] -> Maybe (Query Schema '[] (RowPG PostRowResponse))
 getPostsByIdQ pIds = case idsToColumn pIds of
     Just idQ -> Just $ selectDotStar #posts $ from (subquery (idQ `As` #ids) &
-        innerJoin (subquery $ getPostQ (orderBy [#postElements ! #rowElementOrd & Asc] . orderBy [#posts ! #postRowId & Desc]) id `As` #posts)
+        innerJoin (subquery $ getPostQ
+            (orderBy [#postElements ! #rowElementId & Desc, #postElements ! #rowElementOrd & Asc]) id `As` #posts)
             (#ids ! #id .== #posts ! #postRowId))
     Nothing -> Nothing
 
