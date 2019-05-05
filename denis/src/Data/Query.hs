@@ -665,8 +665,7 @@ getGroupChatForUser :: UserId -> GroupChatId -> StaticPQ GroupChat
 getGroupChatForUser uId gId = do
     chat <- runQueryParams getGroupChatForUserQ (show uId, gId) >>= firstRow
     case (chat) of
-        (Just c@GroupChat{groupChatUsers = Jsonb perms}) ->
-            return c{groupChatUsers = Jsonb . M.delete uId $ perms}
+        (Just c) -> return c
         Nothing -> lift $ S.throwError S.err404
 
 -- MARK: Utils
