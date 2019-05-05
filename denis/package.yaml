@@ -50,7 +50,10 @@ dependencies:
 - data-default-class
 - fast-logger
 - vector
-
+- taggy
+- unordered-containers
+- req
+- data-default
 - lens
 
 - wai-cors
