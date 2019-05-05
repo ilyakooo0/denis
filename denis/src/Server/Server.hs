@@ -15,8 +15,12 @@ import Squeal.PostgreSQL.Pool
 import Data.Maybe
 import Control.Monad.Reader
 import Network.Wai.Handler.Warp
-import Network.HTTP.Types.Method 
+import Network.HTTP.Types.Method
 import Server.Logger
+import Control.Concurrent
+import Data.Faculty.Parser
+import Data.Connection
+import Data.Query
 
 import Network.Wai.Middleware.Cors
 
@@ -27,7 +31,7 @@ getDBString = do
     return $ B.pack $ fromMaybe "host=localhost port=5432 dbname=postgres connect_timeout=10" mDatabaseURL
 
 getServerPort :: IO Int
-getServerPort = maybe 2000 read <$> lookupEnv "PORT" 
+getServerPort = maybe 2000 read <$> lookupEnv "PORT"
 
 getConfig :: IO Config
 getConfig = do
@@ -39,6 +43,7 @@ runServer :: IO ()
 runServer = do
     port <- getServerPort
     cfg <- getConfig
+    void . forkIO $ updateFaculties cfg
     let ctx = genAuthServerContext $ getPool cfg
     (middleLogger, logger) <- mkLogger 100
     let serverAPI = mkServerAPI logger
@@ -59,3 +64,8 @@ policy = CorsResourcePolicy {
 
 settings :: Int -> Settings
 settings port = setPort port . setServerName "Denis" $ defaultSettings
+
+updateFaculties :: Config -> IO ()
+updateFaculties cfg = do
+    fs <- getFaculties
+    forM_ fs (runHandler . flip runReaderT cfg . runQerror . updateFaculty)

@@ -40,7 +40,9 @@ module Data.Query (
     createGroupChat,
     updateGroupChat,
     leaveGroupChat,
-    getGroupChatForUser
+    getGroupChatForUser,
+    getFaculty,
+    updateFaculty
 ) where
 
 import Squeal.PostgreSQL
@@ -75,6 +77,7 @@ import Data.GroupChat
 import Data.Message
 import Server.Query.Dialog
 import qualified Server.Query.Pagination as P
+import Data.Faculty
 
 -- MARK: Documentation
 
@@ -223,6 +226,23 @@ getAllChannelsForUserQ = selectStar $
     from (table #channels) &
     where_ (#namedChannelFullOwner .== param @1) &
     orderBy [#namedChannelFullId & Desc]
+
+updateFacultyQ :: Manipulation Schema (TuplePG Faculty) '[]
+updateFacultyQ = insertRow #faculties
+    (
+    Set (param @1) `as` #facultyName :*
+    Set (param @2) `as` #facultyURL :*
+    Set (param @3) `as` #facultyPath :*
+    Set (param @4) `as` #facultyCampusName :*
+    Set (param @5) `as` #facultyCampusCode :*
+    Set (param @6) `as` #facultyTags
+    )
+    (OnConflictDoNothing)
+    (Returning Nil)
+
+getFacultyQ :: Query Schema (TuplePG (Only Text)) (RowPG Faculty)
+getFacultyQ = selectStar (from (table #faculties) &
+        where_ (#facultyURL .== param @1))
 
 createNamedChannelQ :: Manipulation Schema (TuplePG NamedChannelCreation) (RowPG (Only NamedChannelId))
 createNamedChannelQ = insertRow #channels
@@ -550,6 +570,12 @@ updateChannel uId req = commitedTransactionallyUpdate $ do
     _ <- manipulateParams updateNamedChannelQ $ addUserToChannelUpdate uId (req {namedChannelPeopleIds = uIds})
     return ()
 
+getFaculty :: Text -> StaticPQ Faculty
+getFaculty t = runQueryParams getFacultyQ (Only t) >>= firstRow >>= fromMaybe404
+
+updateFaculty :: Faculty -> StaticPQ ()
+updateFaculty fac = void $ manipulateParams updateFacultyQ fac
+
 getChannelPosts
     :: UserId
     -> Maybe PostId
@@ -742,5 +768,9 @@ liftMaybe Nothing _ = pure Nothing
 liftMaybe (Just a) f = f a
 
 fromMaybe500 :: Maybe a -> StaticPQ a
-fromMaybe500 Nothing = lift $ S.throwError S.err404
+fromMaybe500 Nothing = lift $ S.throwError S.err500
 fromMaybe500 (Just a) = return a
+
+fromMaybe404 :: Maybe a -> StaticPQ a
+fromMaybe404 Nothing = lift $ S.throwError S.err404
+fromMaybe404 (Just a) = return a

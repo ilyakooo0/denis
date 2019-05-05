@@ -140,6 +140,19 @@ type Schema =
                 "messageStorageDestinationUserId" ::: 'NoDef :=> 'Null 'PGint8,
                 "messageStorageBody" ::: 'NoDef :=> 'NotNull (PG (Jsonb (PostElement Message))),
                 "messageStorageTime" ::: 'NoDef :=> 'NotNull 'PGtimestamptz
+            ]),
+
+        "faculties" ::: 'Table (
+            '[
+                "pk_faculties" ::: 'PrimaryKey '["facultyName"]
+            ] :=>
+            '[
+            "facultyName" ::: 'NoDef :=> 'NotNull 'PGtext,
+            "facultyURL" ::: 'NoDef :=> 'NotNull 'PGtext,
+            "facultyPath" ::: 'NoDef :=> 'NotNull 'PGtext,
+            "facultyCampusName" ::: 'NoDef :=> 'NotNull 'PGtext,
+            "facultyCampusCode" ::: 'NoDef :=> 'NotNull 'PGtext,
+            "facultyTags" ::: 'NoDef :=> 'NotNull ('PGvararray ('NotNull 'PGtext))
             ])
 
         -- "postsView" ::: 'View (RowPG PostRowResponse)
@@ -243,7 +256,16 @@ createTables = createTable #users (
             foreignKey #messageStorageAuthorId #users #userId OnDeleteCascade OnUpdateCascade `as` #fk_messages_author :*
             foreignKey #messageStorageDestinationGroupId #groupChats #groupChatId OnDeleteCascade OnUpdateCascade `as` #fk_messages_group :*
             foreignKey #messageStorageDestinationUserId #users #userId OnDeleteCascade OnUpdateCascade `as` #fk_messages_to_user
-    )
+    ) >>> createTable #faculties (
+        notNullable text `as` #facultyName :*
+        notNullable text `as` #facultyURL :*
+        notNullable text `as` #facultyPath :*
+        notNullable text `as` #facultyCampusName :*
+        notNullable text `as` #facultyCampusCode :*
+        notNullable (vararray text) `as` #facultyTags
+        ) (
+            primaryKey #facultyName `as` #pk_faculties
+        )
 -- quoteUniquenessCheck :: TableConstraintExpression Schema _ (Check '["rowElementOrd", "rowElementMarkdown", "rowElementLatex", "rowElementImage", "rowElementQuote", "rowElementAttachment"])
 -- quoteUniquenessCheck = check (#rowElementOrd :* #rowElementMarkdown :* #rowElementLatex :* #rowElementImage :* #rowElementQuote :* #rowElementAttachment) $
 --     ((ifThenElse (isNull #rowElementOrd) 1 0) +
