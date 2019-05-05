@@ -636,7 +636,7 @@ updateGroupChat uId (GroupChat gId (Jsonb perms) name) = commitedTransactionally
     let userPerm = fromMaybe minChatPermissions $ M.lookup uId perms'
     unless (isAdmin userPerm) $
         lift $ S.throwError $ S.err401
-    let newPerms = M.adjust (max userPerm) uId perms
+    let newPerms = M.alter (Just . max userPerm . fromMaybe userPerm) uId perms
     void $ manipulateParams updateGroupChatQ (GroupChat gId (Jsonb newPerms) name)
 
 leaveGroupChat :: UserId -> GroupChatId -> StaticPQ ()
