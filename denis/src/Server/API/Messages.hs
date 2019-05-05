@@ -39,7 +39,7 @@ type MessagesApi =
         "createGroupChat" :> CreateGroupChatDescription :> ReqBody '[JSON] GroupChatCreation :> Post '[JSON] GroupChatId :<|>
         "leaveGroupChat" :> LeaveGroupChatDescription :> ReqBody '[JSON] GroupChatId :> PostNoContent '[JSON, FormUrlEncoded, PlainText] NoContent) :<|>
     "messages" :> (
-        ("get" :>
+        "get" :> (
             "groupChat" :> MessagesGetGroupChatDesctiption :> ReqBody '[JSON] (PaginatingRequest MessageId GroupChatId) :> Post '[JSON] [Message] :<|>
             "userChat" :> MessagesGetUserChatDesctiption :> ReqBody '[JSON] (PaginatingRequest MessageId UserId) :> Post '[JSON] [Message]) :<|>
         "send" :> MessagesSend :> ReqBody '[JSON] MessageCreation :> Post '[JSON] MessageId)
