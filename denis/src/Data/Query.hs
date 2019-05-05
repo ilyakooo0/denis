@@ -474,6 +474,21 @@ verifiedUsers uIds =
         Just uIdsQ -> fmap fromOnly <$> (runQuery uIdsQ >>= getRows)
         Nothing -> return []
 
+deleteGroupChat :: GroupChatId -> StaticPQ ()
+deleteGroupChat gId = commitedTransactionallyUpdate $ do
+    _ <- manipulateParams deleteGroupChatQ (Only gId)
+    _ <- manipulateParams deleteGroupChatMessagesQ (Only gId)
+    return ()
+    where
+        deleteGroupChatQ :: Manipulation Schema (TuplePG (Only GroupChatId)) '[]
+        deleteGroupChatQ = deleteFrom_ #groupChats
+            (#groupChatId .== param @1)
+        deleteGroupChatMessagesQ :: Manipulation Schema (TuplePG (Only GroupChatId)) '[]
+        deleteGroupChatMessagesQ = deleteFrom_ #messages
+            (#messageStorageDestinationGroupId .== param @1)
+
+
+
 -- MARK: FrontEnd functions
 
 -- Nothing <=> no user
@@ -634,22 +649,24 @@ updateGroupChat :: UserId -> GroupChat -> StaticPQ ()
 updateGroupChat uId (GroupChat gId (Jsonb perms) name) = commitedTransactionallyUpdate $ do
     (GroupChat _ (Jsonb perms') _) <- getGroupChatForUser uId gId
     let userPerm = fromMaybe minChatPermissions $ M.lookup uId perms'
-    unless (isAdmin userPerm) $
-        lift $ S.throwError $ S.err401
-    let newPerms = M.alter (Just . max userPerm . fromMaybe userPerm) uId perms
+    unless (isAdmin userPerm) $ lift $ S.throwError $ S.err401
+    let newPerms = M.insert uId userPerm perms
     void $ manipulateParams updateGroupChatQ (GroupChat gId (Jsonb newPerms) name)
 
 leaveGroupChat :: UserId -> GroupChatId -> StaticPQ ()
 leaveGroupChat uId gId = commitedTransactionallyUpdate $ do
     gChat@(GroupChat _ (Jsonb perms) _) <- getGroupChatForUser uId gId
     let newPerms = M.delete uId perms
-    void $ manipulateParams updateGroupChatQ gChat{groupChatUsers = Jsonb newPerms}
+    if M.null newPerms
+        then deleteGroupChat gId
+        else void $ manipulateParams updateGroupChatQ gChat{groupChatUsers = Jsonb newPerms}
 
 getGroupChatForUser :: UserId -> GroupChatId -> StaticPQ GroupChat
 getGroupChatForUser uId gId = do
     chat <- runQueryParams getGroupChatForUserQ (show uId, gId) >>= firstRow
     case (chat) of
-        (Just c) -> return c
+        (Just c@GroupChat{groupChatUsers = Jsonb perms}) ->
+            return c{groupChatUsers = Jsonb . M.delete uId $ perms}
         Nothing -> lift $ S.throwError S.err404
 
 -- MARK: Utils
