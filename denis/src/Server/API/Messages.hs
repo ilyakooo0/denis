@@ -69,7 +69,7 @@ getUserChat uId (PaginatingRequest mId lim dId dir) =
     runQerror $ getMessagesInUserChat uId dId mId lim dir
 
 getGroupChatInfo :: UserId -> GroupChatId -> App GroupChat
-getGroupChatInfo uId gId = runQerror $ getGroupChatForUser uId gId
+getGroupChatInfo uId gId = runQerror $ getGroupChatForUserWithoutSelf uId gId
 
 updateGroupChatApi :: UserId -> GroupChat -> App NoContent
 updateGroupChatApi uId group = runQerror (updateGroupChat uId group) >> return NoContent

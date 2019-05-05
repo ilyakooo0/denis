@@ -40,7 +40,7 @@ module Data.Query (
     createGroupChat,
     updateGroupChat,
     leaveGroupChat,
-    getGroupChatForUser
+    getGroupChatForUserWithoutSelf
 ) where
 
 import Squeal.PostgreSQL
@@ -487,6 +487,12 @@ deleteGroupChat gId = commitedTransactionallyUpdate $ do
         deleteGroupChatMessagesQ = deleteFrom_ #messages
             (#messageStorageDestinationGroupId .== param @1)
 
+getGroupChatForUser :: UserId -> GroupChatId -> StaticPQ GroupChat
+getGroupChatForUser uId gId = do
+    chat <- runQueryParams getGroupChatForUserQ (show uId, gId) >>= firstRow
+    case (chat) of
+        Just c -> return c
+        Nothing -> lift $ S.throwError S.err404
 
 
 -- MARK: FrontEnd functions
@@ -599,7 +605,14 @@ getDialogs
     -> StaticPQ (ResponseWithUsers [Dialog])
 getDialogs uId mId lim dir = do
     resp <- runQueryParams (getChatsQ lim dir) (uId, Just $ show uId, mId) >>= getRows
-    (>>= fromMaybe500) $ (responseToDialogs uId resp `liftMaybe` wrapIntoResponse)
+    (>>= fromMaybe500) $ (
+        ((map removeSelf) <$> (responseToDialogs uId resp))
+        `liftMaybe` wrapIntoResponse)
+    where
+        removeSelf :: Dialog -> Dialog
+        removeSelf (GroupDialog gc@(GroupChat{groupChatUsers = Jsonb perms}) m) =
+            GroupDialog gc{groupChatUsers = Jsonb $ M.delete uId perms} m
+        removeSelf a = a
 
 getMessagesInUserChat
     :: UserId
@@ -655,14 +668,13 @@ updateGroupChat uId (GroupChat gId (Jsonb perms) name) = commitedTransactionally
 
 leaveGroupChat :: UserId -> GroupChatId -> StaticPQ ()
 leaveGroupChat uId gId = commitedTransactionallyUpdate $ do
-    gChat@(GroupChat _ (Jsonb perms) _) <- getGroupChatForUser uId gId
-    let newPerms = M.delete uId perms
-    if M.null newPerms
+    gChat@(GroupChat _ (Jsonb perms) _) <- getGroupChatForUserWithoutSelf uId gId
+    if M.null perms
         then deleteGroupChat gId
-        else void $ manipulateParams updateGroupChatQ gChat{groupChatUsers = Jsonb newPerms}
+        else void $ manipulateParams updateGroupChatQ gChat
 
-getGroupChatForUser :: UserId -> GroupChatId -> StaticPQ GroupChat
-getGroupChatForUser uId gId = do
+getGroupChatForUserWithoutSelf :: UserId -> GroupChatId -> StaticPQ GroupChat
+getGroupChatForUserWithoutSelf uId gId = do
     chat <- runQueryParams getGroupChatForUserQ (show uId, gId) >>= firstRow
     case (chat) of
         (Just c@GroupChat{groupChatUsers = Jsonb perms}) ->
