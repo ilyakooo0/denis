@@ -475,7 +475,7 @@ verifiedUsers uIds =
         Nothing -> return []
 
 deleteGroupChat :: GroupChatId -> StaticPQ ()
-deleteGroupChat gId = commitedTransactionallyUpdate $ do
+deleteGroupChat gId = do
     _ <- manipulateParams deleteGroupChatQ (Only gId)
     _ <- manipulateParams deleteGroupChatMessagesQ (Only gId)
     return ()
