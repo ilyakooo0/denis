@@ -25,8 +25,8 @@ import Server.Query.Pagination
 -- MARK: Implementation
 
 type ChannelsApi = Post '[JSON] [NamedChannel UserId] :<|>
-    "get" :> ReqBody '[JSON] (PaginatingRequest P.PostId NamedChannelId) :> Post '[JSON] (ResponseWithUsers [P.Post]) :<|>
-    "getAnonymous" :> ReqBody '[JSON] (PaginatingRequest P.PostId AnonymousChannel) :> Post '[JSON] (ResponseWithUsers [P.Post]) :<|>
+    "get" :> ReqBody '[JSON] (PaginatingRequest P.PostId (Maybe NamedChannelId)) :> Post '[JSON] (ResponseWithUsers [P.Post]) :<|>
+    "getAnonymous" :> ReqBody '[JSON] (PaginatingRequest P.PostId (Maybe AnonymousChannel)) :> Post '[JSON] (ResponseWithUsers [P.Post]) :<|>
     "create" :> ReqBody '[JSON] NamedChannelCreationRequest :> Post '[JSON] NamedChannelId :<|>
     "update" :> ReqBody '[JSON] (NamedChannel UserId) :> PostNoContent '[JSON, FormUrlEncoded, PlainText] NoContent :<|>
     "delete" :> ReqBody '[JSON] NamedChannelId :> PostNoContent '[JSON, FormUrlEncoded, PlainText] NoContent
@@ -38,11 +38,13 @@ channelsApi uId = getChannelsApi uId :<|> getChannel uId :<|> getAnonymousChanne
 getChannelsApi :: UserId -> App [NamedChannel UserId]
 getChannelsApi uId = runQnotFound $ getAllChannels uId
 
-getAnonymousChannelsApi :: PaginatingRequest P.PostId AnonymousChannel -> App (ResponseWithUsers [P.Post])
-getAnonymousChannelsApi (PaginatingRequest pId lim req dir) = runQnotFound $ getAnonymousChannelPosts pId lim dir req
+getAnonymousChannelsApi :: PaginatingRequest P.PostId (Maybe AnonymousChannel) -> App (ResponseWithUsers [P.Post])
+getAnonymousChannelsApi (PaginatingRequest pId lim (Just req) dir) = runQnotFound $ getAnonymousChannelPosts pId lim dir req
+getAnonymousChannelsApi (PaginatingRequest pId lim Nothing dir) = maybeNotFound . runQnotFound $ getLastPosts pId lim dir
 
-getChannel :: UserId -> PaginatingRequest P.PostId NamedChannelId -> App (ResponseWithUsers [P.Post])
-getChannel uId (PaginatingRequest pId lim cId dir) = runQnotFound $ getChannelPosts uId pId lim dir cId
+getChannel :: UserId -> PaginatingRequest P.PostId (Maybe NamedChannelId) -> App (ResponseWithUsers [P.Post])
+getChannel uId (PaginatingRequest pId lim (Just cId) dir) = runQnotFound $ getChannelPosts uId pId lim dir cId
+getChannel _ (PaginatingRequest pId lim Nothing dir) = maybeNotFound . runQnotFound $ getLastPosts pId lim dir
 
 createChannelApi :: UserId -> NamedChannelCreationRequest -> App NamedChannelId
 createChannelApi uId req = maybeNotFound . runQnotFound $ createNewChannel uId req
