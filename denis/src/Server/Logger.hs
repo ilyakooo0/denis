@@ -49,7 +49,7 @@ mkWaiLogger buff = let
     settings = def {
         -- outputFormat = CustomOutputFormatWithDetails (\ date req _ _ tDiff bss bldr ->
         --     FL.toLogStr (show date) <> (FL.toLogStr . unpack $ fold bss))
-        outputFormat = Apache FromHeader,
+        outputFormat = Detailed False,
         destination = Callback (atomically . modifyTVar buff . flip insertIntoCyclicBuffer . FL.fromLogStr)
         }
     in mkRequestLogger settings
