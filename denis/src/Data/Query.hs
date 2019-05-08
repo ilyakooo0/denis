@@ -257,7 +257,7 @@ getChannelPostsQ
     -> Vector Text
     -> Query
         Schema
-        (TuplePG (Only (Maybe PostId))) -- ^ post id from which to start
+        (TuplePG (Only (Maybe PostId))) -- post id from which to start
         (RowPG PostRowResponse)
 getChannelPostsQ lim dir uIds tags = getLastPostsQ
         (where_ $ jsonbLit tags .?| #postRowTags .|| isUser #postRowAuthorId)
@@ -320,7 +320,7 @@ type ConditionOp schema from grouping params nullity0 nullity1 (ty :: PGType)
 
 type ChatQueryParams = TuplePG
     ( UserId
-    , Maybe String -- ^ Just UserId as String
+    , Maybe String -- Just UserId as String
     , Maybe MessageId
     )
 
