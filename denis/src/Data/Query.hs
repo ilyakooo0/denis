@@ -42,7 +42,8 @@ module Data.Query (
     leaveGroupChat,
     getGroupChatForUser,
     getFaculty,
-    updateFaculty
+    updateFaculty,
+    getFacultyFromQuery
 ) where
 
 import Squeal.PostgreSQL
@@ -69,6 +70,7 @@ import Servant.Docs
 import Data.Proxy
 import Data.Vector (Vector, toList, fromList)
 import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Channel.NamedChannel
 import Data.Channel.AnonymousChannel
 import Data.Maybe (fromMaybe)
@@ -78,6 +80,9 @@ import Data.Message
 import Server.Query.Dialog
 import qualified Server.Query.Pagination as P
 import Data.Faculty
+import Data.ByteString (ByteString)
+import Data.Foldable (fold)
+import Data.Char
 
 -- MARK: Documentation
 
@@ -447,6 +452,56 @@ getGroupChatForUserQ = selectStar $
     where_ (#groupChatId .== param @2) &
     where_ (#groupChatUsers .? param @1)
 
+getFacultySearchResultQ :: Query Schema (TuplePG (Only Text)) (RowPG Faculty)
+getFacultySearchResultQ = selectStar (from (table #faculties) &
+    where_ (vector @@ query) &
+    orderBy [tsRankCd vector query & Desc])
+    where
+        vector = tsVector "russian" (textArrayToText [
+            #facultyName,
+            #facultyPath,
+            #facultyCampusName,
+            (arrayToText #facultyTags)])
+        query = tsQuery (param @1)
+
+tsRankCd
+    :: Expression schema from grouping params ('NotNull 'PGtext)
+    -> Expression schema from grouping params ('NotNull 'PGtext)
+    -> Expression schema from grouping params ('NotNull 'PGfloat4)
+tsRankCd vector query = UnsafeExpression $
+    "ts_rank_cd" <> parenthesized (commaSeparated . map renderExpression $ [vector, query])
+
+tsVector
+    :: ByteString -- ^ Language
+    -> Expression schema from grouping params ('NotNull 'PGtext)
+    -> Expression schema from grouping params ('NotNull 'PGtext)
+tsVector lang x = UnsafeExpression $
+    "to_tsvector" <> parenthesized (commaSeparated  [singleQuotedUtf8 lang, renderExpression x])
+
+tsQuery
+    :: Expression schema from grouping params ('NotNull 'PGtext)
+    -> Expression schema from grouping params ('NotNull 'PGtext)
+tsQuery = unsafeFunction "to_tsquery"
+
+arrayToText
+    :: Expression schema from grouping params ('NotNull  ('PGvararray ('NotNull 'PGtext)))
+    -> Expression schema from grouping params ('NotNull  'PGtext)
+arrayToText x = UnsafeExpression $
+    "array_to_string" <> parenthesized (commaSeparated  [renderExpression x, "' '"])
+
+(@@)
+    :: Expression schema from grouping params (nullity0  'PGtext)
+    -> Expression schema from grouping params (nullity1  'PGtext)
+    -> Expression schema from grouping params (nullity2  'PGbool)
+(@@) = unsafeBinaryOp "@@"
+
+space :: Expression schema from grouping params ('NotNull  'PGtext)
+space = UnsafeExpression "' '"
+
+textArrayToText
+    :: [Expression schema from grouping params ('NotNull  'PGtext)]
+    -> Expression schema from grouping params ('NotNull  'PGtext)
+textArrayToText = fold . L.intersperse space
 
 -- MARK: FrontEnd Data Structures
 
@@ -694,7 +749,14 @@ getGroupChatForUser uId gId = do
         (Just c) -> return c
         Nothing -> lift $ S.throwError S.err404
 
+getFacultyFromQuery :: T.Text -> StaticPQ [Faculty]
+getFacultyFromQuery query =
+    runQueryParams getFacultySearchResultQ (Only . queryFromText $ query) >>= getRows
+
 -- MARK: Utils
+
+queryFromText :: Text -> Text
+queryFromText = T.unwords . L.intersperse "&" . map (`T.append` ":*") . filter (not . T.null) . T.split (not . isAlphaNum)
 
 directionToOperator
     :: P.PaginationDirection

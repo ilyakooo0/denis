@@ -43,7 +43,7 @@ getCampuses = do
         processCampus :: (HM.HashMap T.Text T.Text, T.Text) -> Maybe Campus
         processCampus (hm, name) = do
             code <- HM.lookup "hse-value" hm
-            return $ Campus name code
+            return $ Campus (T.strip name) code
 
 
 getFacultiesForCampus :: Campus -> Req [Faculty]
@@ -58,7 +58,10 @@ getFacultiesForCampus (Campus cName cCode) = do
                 let els = elements [NodeElement el]
                 nameTag <- listToMaybe . texts' mempty . map (NodeElement) . filter (classIs "link large b") $ els
                 let name = T.strip . snd $ nameTag
-                url <- HM.lookup "href" . fst $ nameTag
+                url <- (T.strip . snd . T.breakOnEnd "://") <$> (HM.lookup "href" . fst $ nameTag)
+                _ <- if T.null url
+                    then Nothing
+                    else Just ()
                 let tags = map (T.strip . snd) . texts' mempty . map (NodeElement) . filter (classIs "with-indent small tag-set") $ els
                 let path = T.unwords . map (T.strip . snd) . texts' mempty . map (NodeElement) . filter (classIs "small") $ els
                 return $ Faculty name url path cName cCode (V.fromList tags)

@@ -144,7 +144,7 @@ type Schema =
 
         "faculties" ::: 'Table (
             '[
-                "pk_faculties" ::: 'PrimaryKey '["facultyName"]
+                "pk_faculties" ::: 'PrimaryKey '["facultyURL"]
             ] :=>
             '[
             "facultyName" ::: 'NoDef :=> 'NotNull 'PGtext,
@@ -264,7 +264,7 @@ createTables = createTable #users (
         notNullable text `as` #facultyCampusCode :*
         notNullable (vararray text) `as` #facultyTags
         ) (
-            primaryKey #facultyName `as` #pk_faculties
+            primaryKey #facultyURL `as` #pk_faculties
         )
 -- quoteUniquenessCheck :: TableConstraintExpression Schema _ (Check '["rowElementOrd", "rowElementMarkdown", "rowElementLatex", "rowElementImage", "rowElementQuote", "rowElementAttachment"])
 -- quoteUniquenessCheck = check (#rowElementOrd :* #rowElementMarkdown :* #rowElementLatex :* #rowElementImage :* #rowElementQuote :* #rowElementAttachment) $
