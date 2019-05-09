@@ -47,14 +47,14 @@ import Servant.Docs (ToSample, samples, toSamples)
 
 instance ToSample AuthenticationCredits where
     toSamples _ = samples $ map AuthenticationCredits [56, 103, 8]
-            
+
 -- MARK: Implementation
 
-type AuthenticationHandler = 
-    "login" :> 
-        ReqBody '[JSON] AuthenticationCredits :> 
+type AuthenticationHandler =
+    "login" :>
+        ReqBody '[JSON] AuthenticationCredits :>
         Post '[JSON] (Headers '[Header "Set-Cookie" String] UserId) :<|>
-    "logout" :> 
+    "logout" :>
         PostNoContent '[JSON, PlainText, FormUrlEncoded] (Headers '[Header "Set-Cookie" String] NoContent)
 
 newtype AuthenticationCredits = AuthenticationCredits {authenticationId :: UserId}
@@ -70,21 +70,23 @@ logIn :: AuthenticationCredits -> App (Headers '[Header "Set-Cookie" String] Use
 logIn (AuthenticationCredits uId) = do
     expire <- liftIO $ fmap (addUTCTime (1 * 24 * 60 * 60)) getCurrentTime -- one days
     tId <- fmap userId . runQ err404 . getUser $ uId
-    let cookie = defaultSetCookie { 
-        setCookieName = cookieTokenKey, 
-        setCookieValue = C.pack $ show tId, 
-        setCookieExpires = Just expire, 
-        setCookiePath = Just "/" }
-    return $ addHeader (L.unpack . toLazyByteString . renderSetCookie $ cookie) tId 
+    let cookie = defaultSetCookie {
+        setCookieName = cookieTokenKey,
+        setCookieValue = C.pack $ show tId,
+        setCookieExpires = Just expire,
+        setCookiePath = Just "/",
+        setCookieHttpOnly = True,
+        setCookieSecure = True }
+    return $ addHeader (L.unpack . toLazyByteString . renderSetCookie $ cookie) tId
 
 logOut :: App (Headers '[Header "Set-Cookie" String] NoContent)
-logOut =   
-    let cookie = defaultSetCookie { 
-        setCookieName = cookieTokenKey, 
-        setCookieValue = "invalid", 
-        setCookieExpires = Just (UTCTime (ModifiedJulianDay 0) 0), 
+logOut =
+    let cookie = defaultSetCookie {
+        setCookieName = cookieTokenKey,
+        setCookieValue = "invalid",
+        setCookieExpires = Just (UTCTime (ModifiedJulianDay 0) 0),
         setCookiePath = Just "/" }
-    in return $ addHeader (L.unpack . toLazyByteString . renderSetCookie $ cookie) NoContent 
+    in return $ addHeader (L.unpack . toLazyByteString . renderSetCookie $ cookie) NoContent
 
 checkToken :: DBConnection -> BS.ByteString -> Handler UserId
 checkToken conn token = do
