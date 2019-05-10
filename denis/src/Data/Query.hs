@@ -589,7 +589,7 @@ updateTokenQ :: Manipulation Schema (TuplePG Token) '[]
 updateTokenQ = update_ #tokens (
         Same `as` #tokenUserId :*
         Same `as` #tokenValue :*
-        Same `as` #tokenExpiryDate :*
+        Set (param @3) `as` #tokenExpiryDate :*
         Set (param @4) `as` #tokenVerificationCode :*
         Set (param @5) `as` #tokenActivationTriesLeft)
     (#tokenUserId .== param @1 .&& #tokenValue .== param @2)
