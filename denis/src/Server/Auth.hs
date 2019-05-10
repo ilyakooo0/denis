@@ -71,7 +71,7 @@ type LoginDescription = Description "Try to log in with the given email\n\nRespo
 
 type LogoutDescription = Description "Log out with the given cookie"
 
-type VerifyDescription = Description "Verify token with the verification code from the user.\n\nReturns 400 if the token was not supplied.\n\nReturns 498 if the token was parsed but is invalid.\n\nRetusn 403 if the token/code compination is invalid."
+type VerifyDescription = Description "Verify token with the verification code from the user.\n\nReturns 400 if the token was not supplied.\n\nReturns 498 if the token was parsed but is invalid.\n\nReturns 403 if the token/code compination is invalid."
 
 type RegisterDescription = Description "Register the user for a new account.\n\nReturns 409 if a user can not be created. (Most likely the email is already registered).\n\nSets the token if creation was successful.\n\nYou should prompt user for code and verify the token with `/verify`."
 
