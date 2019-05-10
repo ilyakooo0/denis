@@ -896,8 +896,10 @@ getFacultyFromQuery query =
 createToken :: Token -> StaticPQ ()
 createToken token = void $ manipulateParams createTokenQ token
 
+
+-- NOTE: Not transactional
 validateToken :: Token -> StaticPQ ()
-validateToken token = commitedTransactionallyUpdate $ do
+validateToken token = do
     void $ manipulateParams updateTokenQ token{tokenVerificationCode = Nothing}
     void $ manipulateParams validateUserQ $ Only $ tokenUserId token
 
