@@ -517,7 +517,7 @@ getFacultySearchResultQ = selectStar (from (table #faculties) &
             #facultyPath,
             #facultyCampusName,
             (arrayToText #facultyTags)])
-        query = tsQuery (param @1)
+        query = tsQuery "russian" (param @1)
 
 tsRankCd
     :: Expression schema from grouping params ('NotNull 'PGtext)
@@ -534,9 +534,11 @@ tsVector lang x = UnsafeExpression $
     "to_tsvector" <> parenthesized (commaSeparated  [singleQuotedUtf8 lang, renderExpression x])
 
 tsQuery
-    :: Expression schema from grouping params ('NotNull 'PGtext)
+    :: ByteString -- ^ Language
     -> Expression schema from grouping params ('NotNull 'PGtext)
-tsQuery = unsafeFunction "to_tsquery"
+    -> Expression schema from grouping params ('NotNull 'PGtext)
+tsQuery lang x = UnsafeExpression $
+    "to_tsquery" <> parenthesized (commaSeparated  [singleQuotedUtf8 lang, renderExpression x])
 
 arrayToText
     :: Expression schema from grouping params ('NotNull  ('PGvararray ('NotNull 'PGtext)))
