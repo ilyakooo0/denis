@@ -33,7 +33,7 @@ data Token = Token {
     tokenExpiryDate :: UTCTime,
     tokenVerificationCode :: Maybe TokenVerificationCode,
     tokenActivationTriesLeft :: Int32
-} deriving (GHC.Generic, SOP.Generic, SOP.HasDatatypeInfo)
+} deriving (Show, GHC.Generic, SOP.Generic, SOP.HasDatatypeInfo)
 
 generateToken :: (MonadIO m, CryptoRNG m) => UserId -> m Token
 generateToken uId = do
