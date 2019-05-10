@@ -1,0 +1,32 @@
+{-# LANGUAGE
+    DataKinds ,
+    DeriveGeneric ,
+    OverloadedLabels,
+    OverloadedStrings ,
+    TypeApplications ,
+    TypeOperators,
+    LambdaCase #-}
+
+module Server.API.Faculty (
+    FacultyAPI,
+    facultyServer
+    ) where
+
+import Servant.Server
+import Servant
+import Server.App
+import Data.Connection
+import Data.Query
+import Data.Text (Text)
+import Data.Faculty
+
+type SearchDescription = Description "Returns faculties for given string"
+
+type FacultyAPI =
+    "search" :> SearchDescription :> ReqBody '[PlainText, JSON] Text :> Post '[JSON] [Faculty]
+
+facultyServer :: ServerT FacultyAPI App
+facultyServer = search
+
+search :: Text -> App [Faculty]
+search = runQerror . getFacultyFromQuery

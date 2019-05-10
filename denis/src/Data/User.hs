@@ -5,11 +5,13 @@
     OverloadedStrings ,
     TypeApplications ,
     TypeOperators,
-    OverloadedStrings #-}
+    OverloadedStrings,
+    DeriveAnyClass #-}
 
 module Data.User (
     User(..),
-    UserId
+    UserId,
+    UserEmail
 ) where
 
 import Data.Int (Int64)
@@ -18,35 +20,37 @@ import qualified GHC.Generics as GHC
 import Data.Text (Text)
 import Data.Aeson
 import Servant.Docs (ToSample, toSamples, samples)
+import Data.Proxy
 
 -- MARK: Documentation
 
-instance ToSample User where
-    toSamples _ = samples [User 8 "Vasya" "Pupkinovuch" "Pupkin", User 69 "Seva" "Algebrovich" "Leonidov"]
+instance (ToSample f) => ToSample (User f) where
+    toSamples _ = samples $ [User 8 "Vasya" "Pupkinovuch" "Pupkin", User 69 "Seva" "Algebrovich" "Leonidov"] <*> (map snd $ toSamples Proxy) <*> ["foo@hse.ru"]
 
 -- MARK: Implementation
 
 type UserId = Int64
+type UserEmail = Text
 
-data User = User {
+data User f = User {
     userId :: UserId,
     firstName :: Text,
     middleName :: Text,
-    lastName :: Text
-} deriving (GHC.Generic)
+    lastName :: Text,
+    userFaculty :: f,
+    userEmail :: UserEmail
+} deriving (GHC.Generic, SOP.Generic, SOP.HasDatatypeInfo)
 
-instance SOP.Generic User
-
-instance SOP.HasDatatypeInfo User
-
-instance ToJSON User where
-    toJSON (User uId fName mName lName) = object [
+instance (ToJSON f) => ToJSON (User f) where
+    toJSON (User uId fName mName lName faculty email) = object [
         "id" .= uId,
         "firstName" .= fName,
         "middleName" .= mName,
-        "lastName" .= lName
+        "lastName" .= lName,
+        "faculty" .= faculty,
+        "email" .= email
         ]
 
-instance FromJSON User where
+instance (FromJSON f) => FromJSON (User f) where
     parseJSON = withObject "named channel" $ \e ->
-        User <$> e .: "id" <*> e .: "firstName" <*> e .: "middleName" <*> e .: "lastName"
+        User <$> e .: "id" <*> e .: "firstName" <*> e .: "middleName" <*> e .: "lastName" <*> e .: "faculty" <*> e .: "email"

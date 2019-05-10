@@ -15,30 +15,45 @@ import Squeal.PostgreSQL.Pool
 import Data.Maybe
 import Control.Monad.Reader
 import Network.Wai.Handler.Warp
-import Network.HTTP.Types.Method 
+import Network.HTTP.Types.Method
 import Server.Logger
-
+import Control.Concurrent
+import Data.Faculty.Parser
+import Data.Connection
+import Data.Query
+import Crypto.RNG
 import Network.Wai.Middleware.Cors
-
 
 getDBString :: IO B.ByteString
 getDBString = do
     mDatabaseURL <- lookupEnv "DATABASE_URL"
     return $ B.pack $ fromMaybe "host=localhost port=5432 dbname=postgres connect_timeout=10" mDatabaseURL
 
+getMailConfig :: IO MailConfig
+getMailConfig = do
+    (Just host) <- lookupEnv "MAIL_HOST"
+    port <- (fromMaybe 25 . fmap read) <$> lookupEnv "MAIL_PORT"
+    (Just user) <- lookupEnv "MAIL_USER"
+    (Just pass) <- lookupEnv "MAIL_PASS"
+    return $ MailConfig host port user pass
+
 getServerPort :: IO Int
-getServerPort = maybe 2000 read <$> lookupEnv "PORT" 
+getServerPort = maybe 2000 read <$> lookupEnv "PORT"
 
 getConfig :: IO Config
 getConfig = do
     databaseURL <- getDBString
     conn <- createConnectionPool databaseURL 3 0.5 10
-    return $ Config conn
+    crypto <- newCryptoRNGState
+    -- (Jusr selfRoot) <- lookupEnv "SELF_ROOT_URL"
+    mail <- getMailConfig
+    return $ Config conn crypto mail
 
 runServer :: IO ()
 runServer = do
     port <- getServerPort
     cfg <- getConfig
+    void . forkIO $ updateFaculties cfg
     let ctx = genAuthServerContext $ getPool cfg
     (middleLogger, logger) <- mkLogger 100
     let serverAPI = mkServerAPI logger
@@ -59,3 +74,8 @@ policy = CorsResourcePolicy {
 
 settings :: Int -> Settings
 settings port = setPort port . setServerName "Denis" $ defaultSettings
+
+updateFaculties :: Config -> IO ()
+updateFaculties cfg = do
+    fs <- getFaculties
+    forM_ fs (runHandler . flip runReaderT cfg . runQerror . updateFaculty)

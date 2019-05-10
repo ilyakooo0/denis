@@ -29,6 +29,8 @@ import Control.Lens
 import Server.Query.ComplexQuery
 import Server.API.Completions
 import Server.API.Messages
+import Data.Faculty
+import Server.API.Faculty
 
 -- MARK: Documentation
 
@@ -46,13 +48,14 @@ type API =
         "authentication" :> AuthenticationHandler :<|>
         Authentication :> ComplexQuery :> (
             "authentication" :> "me" :> Post '[JSON] UserId :<|>
-            "users" :> ReqBody '[JSON] [UserId] :> Post '[JSON] [User] :<|>
-            "users" :> "all" :> Post '[JSON] [User] :<|>
+            "users" :> ReqBody '[JSON] [UserId] :> Post '[JSON] [User Faculty] :<|>
+            "users" :> "all" :> Post '[JSON] [User Faculty] :<|>
             "posts" :> PostApi :<|>
             "channels" :> ChannelsApi :<|>
             MessagesApi
             ) :<|>
-        "tags" :> TagsAPI
+        "tags" :> TagsAPI :<|>
+        "faculty" :> FacultyAPI
 
 serverProxy :: Proxy API
 serverProxy = Proxy
@@ -68,4 +71,5 @@ mkServerAPI l =
         channelsApi uId :<|>
         messagesServer uId
         ) :<|>
-        tagsServer
+        tagsServer :<|>
+        facultyServer
