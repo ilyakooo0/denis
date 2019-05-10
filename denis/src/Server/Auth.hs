@@ -192,8 +192,12 @@ register creation' = do
         let token = genToken uId
         createToken token
         return token
-    let cookie = generateCookie token
-    return $ addHeader cookie NoContent
+    case tokenVerificationCode token of
+        Just code -> do
+            sendTokenVerificationEmail code (userCreationUserEmail creation)
+            let cookie = generateCookie token
+            return $ addHeader cookie NoContent
+        Nothing -> throwError err500
 
 normalizaUser :: UserCreation -> UserCreation
 normalizaUser (UserCreation fName mName lName faculty email) =
@@ -201,7 +205,7 @@ normalizaUser (UserCreation fName mName lName faculty email) =
         (T.strip fName)
         (T.strip mName)
         (T.strip lName)
-        (T.strip faculty)
+        (T.toLower . T.strip $ faculty)
         (T.toLower . T.strip $ email)
 
 validateUser :: UserCreation -> Bool
