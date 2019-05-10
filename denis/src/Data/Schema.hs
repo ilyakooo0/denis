@@ -166,7 +166,10 @@ type Schema =
                 "tokenValue" ::: 'NoDef :=> 'NotNull 'PGbytea,
                 "tokenExpiryDate" ::: 'NoDef :=> 'NotNull 'PGtimestamptz,
                 "tokenVerificationCode" ::: 'NoDef :=> 'Null 'PGint4, -- null == verified
-                "tokenActivationTriesLeft" ::: 'NoDef :=> 'NotNull 'PGint4
+                "tokenActivationTriesLeft" ::: 'NoDef :=> 'NotNull 'PGint4,
+                "tokenUserAgent" ::: 'NoDef :=> 'NotNull 'PGtext,
+                "tokenActivationCode" ::: 'NoDef :=> 'Null 'PGbytea,
+                "tokenDeactivationCode" ::: 'NoDef :=> 'NotNull 'PGbytea
             ])
 
         -- "postsView" ::: 'View (RowPG PostRowResponse)
@@ -289,7 +292,10 @@ createTables = createTable #faculties (
         notNullable bytea `as` #tokenValue :*
         notNullable timestampWithTimeZone `as` #tokenExpiryDate :*
         nullable int4 `as` #tokenVerificationCode :*
-        notNullable int4 `as` #tokenActivationTriesLeft
+        notNullable int4 `as` #tokenActivationTriesLeft :*
+        notNullable text `as` #tokenUserAgent :*
+        nullable bytea `as` #tokenActivationCode :*
+        notNullable bytea `as` #tokenDeactivationCode
         ) (
             foreignKey #tokenUserId #users #userRowId OnDeleteCascade OnUpdateCascade `as` #fk_user_token
     )

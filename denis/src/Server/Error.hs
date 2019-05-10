@@ -2,7 +2,7 @@
 
 module Server.Error (
     invalidToken
-) where 
+) where
 
 import Servant.Server
 

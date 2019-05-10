@@ -582,7 +582,10 @@ createTokenQ = insertRow_ #tokens (
         Set (param @2) `as` #tokenValue :*
         Set (param @3) `as` #tokenExpiryDate :*
         Set (param @4) `as` #tokenVerificationCode :*
-        Set (param @5) `as` #tokenActivationTriesLeft
+        Set (param @5) `as` #tokenActivationTriesLeft :*
+        Set (param @6) `as` #tokenUserAgent :*
+        Set (param @7) `as` #tokenActivationCode :*
+        Set (param @8) `as` #tokenDeactivationCode
     )
 
 updateTokenQ :: Manipulation Schema (TuplePG Token) '[]
@@ -591,7 +594,10 @@ updateTokenQ = update_ #tokens (
         Same `as` #tokenValue :*
         Set (param @3) `as` #tokenExpiryDate :*
         Set (param @4) `as` #tokenVerificationCode :*
-        Set (param @5) `as` #tokenActivationTriesLeft)
+        Set (param @5) `as` #tokenActivationTriesLeft :*
+        Set (param @6) `as` #tokenUserAgent :*
+        Set (param @7) `as` #tokenActivationCode :*
+        Set (param @8) `as` #tokenDeactivationCode)
     (#tokenUserId .== param @1 .&& #tokenValue .== param @2)
 
 deleteTokenQ :: Manipulation Schema (TuplePG (UserId, ByteString)) '[]
