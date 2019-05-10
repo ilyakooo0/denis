@@ -21,17 +21,32 @@ import Data.Message
 
 type Schema =
     '[
-        "users" ::: 'Table ( '[
-            "pk_users" ::: 'PrimaryKey '["userId"]] :=>
+        "faculties" ::: 'Table ('[
+                "pk_faculties" ::: 'PrimaryKey '["facultyUrl"]] :=>
             '[
-                "userId" ::: 'Def :=> 'NotNull 'PGint8,
-                "firstName" ::: 'NoDef :=> 'NotNull 'PGtext,
-                "middleName" ::: 'NoDef :=> 'NotNull 'PGtext,
-                "lastName" ::: 'NoDef :=> 'NotNull 'PGtext
+                "facultyName" ::: 'NoDef :=> 'NotNull 'PGtext,
+                "facultyUrl" ::: 'NoDef :=> 'NotNull 'PGtext,
+                "facultyPath" ::: 'NoDef :=> 'NotNull 'PGtext,
+                "facultyCampusName" ::: 'NoDef :=> 'NotNull 'PGtext,
+                "facultyCampusCode" ::: 'NoDef :=> 'NotNull 'PGtext,
+                "facultyTags" ::: 'NoDef :=> 'NotNull ('PGvararray ('NotNull 'PGtext))
+            ]),
+        "users" ::: 'Table ( '[
+            "pk_users" ::: 'PrimaryKey '["userRowId"],
+            "user_email" ::: 'Unique '["userRowEmail"],
+            "fk_user_faculty" ::: 'ForeignKey '["userRowFacultyUrl"] "faculties" '["facultyUrl"]] :=>
+            '[
+                "userRowId" ::: 'Def :=> 'NotNull 'PGint8,
+                "userRowFirstName" ::: 'NoDef :=> 'NotNull 'PGtext,
+                "userRowMiddleName" ::: 'NoDef :=> 'NotNull 'PGtext,
+                "userRowLastName" ::: 'NoDef :=> 'NotNull 'PGtext,
+                "userRowFacultyUrl" ::: 'NoDef :=> 'NotNull 'PGtext,
+                "userRowEmail" ::: 'NoDef :=> 'NotNull 'PGtext,
+                "userRowIsValidated" ::: 'NoDef :=> 'NotNull 'PGbool
             ]),
         "posts" ::: 'Table ( '[
             "pk_posts" ::: 'PrimaryKey '["postRowId"],
-            "fk_author_id" ::: 'ForeignKey '["postRowAuthorId"] "users" '["userId"]] :=>
+            "fk_author_id" ::: 'ForeignKey '["postRowAuthorId"] "users" '["userRowId"]] :=>
             '[
                 "postRowId" ::: 'Def :=> 'NotNull 'PGint8,
                 "postRowAuthorId" ::: 'NoDef :=> 'NotNull 'PGint8,
@@ -81,7 +96,7 @@ type Schema =
         "channels" ::: 'Table (
             '[
                 "pk_channels" ::: 'PrimaryKey '["namedChannelFullId"],
-                "fk_channels_users_id" ::: 'ForeignKey '["namedChannelFullOwner"] "users" '["userId"]
+                "fk_channels_users_id" ::: 'ForeignKey '["namedChannelFullOwner"] "users" '["userRowId"]
             ] :=>
             '[
                 "namedChannelFullId" ::: 'Def :=> 'NotNull 'PGint8,
@@ -102,8 +117,8 @@ type Schema =
         -- "userMessages" ::: 'Table (
         --     '[
         --         "pk_user_messages" ::: 'PrimaryKey '["userMessageId"],
-        --         "fk_user_messages_from" ::: 'ForeignKey '["userMessageFrom"] "users" '["userId"],
-        --         "fk_user_messages_to" ::: 'ForeignKey '["userMessageTo"] "users" '["userId"]
+        --         "fk_user_messages_from" ::: 'ForeignKey '["userMessageFrom"] "users" '["userRowId"],
+        --         "fk_user_messages_to" ::: 'ForeignKey '["userMessageTo"] "users" '["userRowId"]
 
         --     ] :=>
         --     '[
@@ -117,7 +132,7 @@ type Schema =
         --     '[
         --         "pk_group_messages" ::: 'PrimaryKey '["groupChatMessageId"],
         --         "fk_group_messages_group" ::: 'ForeignKey '["groupChatMessageGroupChatId"] "groupChats" '["groupChatId"],
-        --         "fk_group_messages_author" ::: 'ForeignKey '["groupChatMessageAuthorId"] "users" '["userId"]
+        --         "fk_group_messages_author" ::: 'ForeignKey '["groupChatMessageAuthorId"] "users" '["userRowId"]
         --     ] :=>
         --     '[
         --         "groupChatMessageId" ::: 'Def :=> 'NotNull 'PGint8,
@@ -129,9 +144,9 @@ type Schema =
         "messages" ::: 'Table (
             '[
                 "pk_messages" ::: 'PrimaryKey '["messageStorageId"],
-                "fk_messages_author" ::: 'ForeignKey '["messageStorageAuthorId"] "users" '["userId"],
+                "fk_messages_author" ::: 'ForeignKey '["messageStorageAuthorId"] "users" '["userRowId"],
                 "fk_messages_group" ::: 'ForeignKey '["messageStorageDestinationGroupId"] "groupChats" '["groupChatId"],
-                "fk_messages_to_user" ::: 'ForeignKey '["messageStorageDestinationUserId"] "users" '["userId"]
+                "fk_messages_to_user" ::: 'ForeignKey '["messageStorageDestinationUserId"] "users" '["userRowId"]
             ] :=>
             '[
                 "messageStorageId" ::: 'Def :=> 'NotNull 'PGint8,
@@ -140,6 +155,18 @@ type Schema =
                 "messageStorageDestinationUserId" ::: 'NoDef :=> 'Null 'PGint8,
                 "messageStorageBody" ::: 'NoDef :=> 'NotNull (PG (Jsonb (PostElement Message))),
                 "messageStorageTime" ::: 'NoDef :=> 'NotNull 'PGtimestamptz
+            ]),
+        "tokens" ::: 'Table (
+            '[
+                -- "pk_token" ::: 'PrimaryKey '["tokenValue"],
+                "fk_user_token" ::: 'ForeignKey '["tokenUserId"] "users" '["userRowId"]
+            ] :=>
+            '[
+                "tokenUserId" ::: 'NoDef :=> 'NotNull 'PGint8,
+                "tokenValue" ::: 'NoDef :=> 'NotNull 'PGbytea,
+                "tokenExpiryDate" ::: 'NoDef :=> 'NotNull 'PGtimestamptz,
+                "tokenVerificationCode" ::: 'NoDef :=> 'Null 'PGint4, -- null == verified
+                "tokenActivationTriesLeft" ::: 'NoDef :=> 'NotNull 'PGint4
             ])
 
         -- "postsView" ::: 'View (RowPG PostRowResponse)
@@ -159,13 +186,27 @@ type Schema =
 
 
 createTables :: Definition '[] Schema
-createTables = createTable #users (
-        serial8 `as` #userId :*
-        notNullable text `as` #firstName :*
-        notNullable text `as` #middleName :*
-        notNullable text `as` #lastName
+createTables = createTable #faculties (
+        notNullable text `as` #facultyName :*
+        notNullable text `as` #facultyUrl :*
+        notNullable text `as` #facultyPath :*
+        notNullable text `as` #facultyCampusName :*
+        notNullable text `as` #facultyCampusCode :*
+        notNullable (vararray text) `as` #facultyTags
         ) (
-        primaryKey #userId `as` #pk_users
+            primaryKey #facultyUrl `as` #pk_faculties
+        ) >>> createTable #users (
+        serial8 `as` #userRowId :*
+        notNullable text `as` #userRowFirstName :*
+        notNullable text `as` #userRowMiddleName :*
+        notNullable text `as` #userRowLastName :*
+        notNullable text `as` #userRowFacultyUrl :*
+        notNullable text `as` #userRowEmail :*
+        notNullable bool `as` #userRowIsValidated
+        ) (
+        primaryKey #userRowId `as` #pk_users :*
+        unique #userRowEmail `as` #user_email :*
+        foreignKey #userRowFacultyUrl #faculties #facultyUrl OnDeleteCascade OnUpdateCascade `as` #fk_user_faculty
     ) >>> createTable #posts (
         serial8 `as` #postRowId :*
         notNullable int8 `as` #postRowAuthorId :*
@@ -173,7 +214,7 @@ createTables = createTable #users (
         notNullable (vararray text) `as` #postRowTags
         ) (
             primaryKey #postRowId `as` #pk_posts :*
-            foreignKey #postRowAuthorId #users #userId OnDeleteCascade OnUpdateCascade `as` #fk_author_id
+            foreignKey #postRowAuthorId #users #userRowId OnDeleteCascade OnUpdateCascade `as` #fk_author_id
     ) >>> createTable #quotes (
         serial8 `as` #quoteRowId :*
         notNullable int8 `as` #quoteRowPostId
@@ -210,7 +251,7 @@ createTables = createTable #users (
         notNullable (vararray int8) `as` #namedChannelFullPeopleIds
         ) (
             primaryKey #namedChannelFullId `as` #pk_channels :*
-            foreignKey #namedChannelFullOwner #users #userId OnDeleteCascade OnUpdateCascade `as` #fk_channels_users_id
+            foreignKey #namedChannelFullOwner #users #userRowId OnDeleteCascade OnUpdateCascade `as` #fk_channels_users_id
     -- ) >>> createView #postsView (select (
     --     #posts ! #postRowId :*
     --     #posts ! #postRowAuthorId :*
@@ -240,9 +281,17 @@ createTables = createTable #users (
         notNullable timestampWithTimeZone `as` #messageStorageTime
         ) (
             primaryKey #messageStorageId `as` #pk_messages :*
-            foreignKey #messageStorageAuthorId #users #userId OnDeleteCascade OnUpdateCascade `as` #fk_messages_author :*
+            foreignKey #messageStorageAuthorId #users #userRowId OnDeleteCascade OnUpdateCascade `as` #fk_messages_author :*
             foreignKey #messageStorageDestinationGroupId #groupChats #groupChatId OnDeleteCascade OnUpdateCascade `as` #fk_messages_group :*
-            foreignKey #messageStorageDestinationUserId #users #userId OnDeleteCascade OnUpdateCascade `as` #fk_messages_to_user
+            foreignKey #messageStorageDestinationUserId #users #userRowId OnDeleteCascade OnUpdateCascade `as` #fk_messages_to_user
+    ) >>> createTable #tokens (
+        notNullable int8 `as` #tokenUserId :*
+        notNullable bytea `as` #tokenValue :*
+        notNullable timestampWithTimeZone `as` #tokenExpiryDate :*
+        nullable int4 `as` #tokenVerificationCode :*
+        notNullable int4 `as` #tokenActivationTriesLeft
+        ) (
+            foreignKey #tokenUserId #users #userRowId OnDeleteCascade OnUpdateCascade `as` #fk_user_token
     )
 -- quoteUniquenessCheck :: TableConstraintExpression Schema _ (Check '["rowElementOrd", "rowElementMarkdown", "rowElementLatex", "rowElementImage", "rowElementQuote", "rowElementAttachment"])
 -- quoteUniquenessCheck = check (#rowElementOrd :* #rowElementMarkdown :* #rowElementLatex :* #rowElementImage :* #rowElementQuote :* #rowElementAttachment) $

@@ -16,7 +16,8 @@ module Data.Connection (
     runQerror,
     maybeNotFound,
     maybeInvalidToken,
-    commitedTransactionallyUpdate
+    commitedTransactionallyUpdate,
+    runQsilent
 ) where
 
 import Squeal.PostgreSQL
@@ -43,6 +44,10 @@ runQnotFound = runQ err404
 
 runQerror :: StaticPQ a -> App a
 runQerror = runQ err500
+
+runQsilent :: StaticPQ a -> App ()
+runQsilent req = handleSqueal (liftIO . print) $ asks getPool >>= lift . runPoolPQ req
+    >> return ()
 
 maybeNotFound :: App (Maybe a) -> App a
 maybeNotFound = (>>= (\t -> case t of

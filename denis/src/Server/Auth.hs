@@ -7,8 +7,10 @@
     ScopedTypeVariables,
     TypeFamilies,
     TypeOperators,
-    UndecidableInstances #-}
-
+    UndecidableInstances,
+    DeriveAnyClass,
+    RecordWildCards #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 module Server.Auth (
     checkToken,
     cookieTokenKey,
@@ -28,7 +30,6 @@ import qualified Data.ByteString.Lazy.Char8 as L
 import Data.Query
 import Server.Error
 import Control.Monad.Except
-import Text.Read (readMaybe)
 import Data.Connection
 import Servant.Server.Experimental.Auth
 import Servant.API
@@ -40,72 +41,192 @@ import Data.Time.Calendar
 import Data.Proxy
 import qualified GHC.Generics as GHC
 import Data.Aeson
+import qualified Data.Aeson as A
 import Data.Binary.Builder (toLazyByteString)
 import Servant.Docs (ToSample, samples, toSamples)
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
+import Text.Regex
+import qualified Data.ByteString.Base64 as BS
+import Data.Maybe
+import Server.Auth.Token
+import Server.Auth.Mail
+import Data.Int
 
 -- MARK: Documentation
 
 instance ToSample AuthenticationCredits where
-    toSamples _ = samples $ map AuthenticationCredits [56, 103, 8]
+    toSamples _ = samples $ map AuthenticationCredits ["vchernyshev@hse.ru", "iikostyuchenko@hse.ru"]
+
+instance ToSample UserLoginResponse where
+    toSamples _ = samples $ map UserLoginResponse [UserIsRegistered, UserCanRegister, InvalidUser]
+
+instance ToSample Int32 where
+    toSamples _ = samples [382934, 103845, 294905]
+
+instance ToSample UserCreation where
+    toSamples _ = samples $ [UserCreation "Seva" "Algebrovich" "Leonidov" "cs.hse.ru/dse"  "vchernyshev@hse.ru"]
+
+type LoginDescription = Description "Try to log in with the given email\n\nResponse fields:\n\n- `registered` -- User is registered and the cookie has been set. You now need to get a verification code from the user and pass it to `/verify`.\n- `canRegister` -- the email is valid, but the user needs to register. Prompt him for information and pass it to `/register`.\n- `invalid` -- the email is invalid."
+
+type LogoutDescription = Description "Log out with the given cookie"
+
+type VerifyDescription = Description "Verify token with the verification code from the user.\n\nReturns 400 if the token was not supplied.\n\nReturns 498 if the token was parsed but is invalid.\n\n"
+
+type RegisterDescription = Description "Register the user for a new account.\n\nReturns 409 if a user can not be created. (Most likely the email is already registered).\n\nSets the token if creation was successful.\n\nYou should prompt user for code and verify the token with `/verify`."
 
 -- MARK: Implementation
 
 type AuthenticationHandler =
-    "login" :>
+    "login" :> LoginDescription :>
         ReqBody '[JSON] AuthenticationCredits :>
-        Post '[JSON] (Headers '[Header "Set-Cookie" String] UserId) :<|>
-    "logout" :>
-        PostNoContent '[JSON, PlainText, FormUrlEncoded] (Headers '[Header "Set-Cookie" String] NoContent)
+        Post '[JSON] (Headers '[Header "Set-Cookie" String] UserLoginResponse) :<|>
+    "logout" :> LogoutDescription
+        :> Header "cookie" String
+        :> PostNoContent '[JSON, PlainText, FormUrlEncoded] (Headers '[Header "Set-Cookie" String] NoContent) :<|>
+    "verify" :> VerifyDescription :>
+        Header "cookie" String :> ReqBody '[JSON] Int32 :> PostNoContent '[JSON, PlainText, FormUrlEncoded] NoContent :<|>
+    "register" :> RegisterDescription :>
+        ReqBody '[JSON] UserCreation :> PostNoContent '[JSON, PlainText, FormUrlEncoded] (Headers '[Header "Set-Cookie" String] NoContent)
 
-newtype AuthenticationCredits = AuthenticationCredits {authenticationId :: UserId}
-    deriving GHC.Generic
+data UserResponseStatus = UserIsRegistered | UserCanRegister | InvalidUser
+    deriving (Show)
 
-instance ToJSON AuthenticationCredits
-instance FromJSON AuthenticationCredits
+instance ToJSON UserResponseStatus where
+    toJSON UserIsRegistered = "registered"
+    toJSON UserCanRegister = "canRegister"
+    toJSON InvalidUser = "invalid"
+
+data UserLoginResponse = UserLoginResponse {
+    userStatus :: UserResponseStatus
+} deriving (Show, GHC.Generic, ToJSON)
+
+data AuthenticationCookieData = AuthenticationCookieData {
+    cookieUserId :: UserId,
+    cookieUserToken :: BS.ByteString
+} deriving (Show, GHC.Generic, ToJSON, FromJSON)
+
+instance ToJSON BS.ByteString where
+    toJSON = A.String . T.decodeUtf8 . BS.encode
+
+instance FromJSON BS.ByteString where
+    parseJSON (A.String s) = case (BS.decode . T.encodeUtf8) s of
+        Left e -> fail e
+        Right v -> return v
+    parseJSON _ = fail "Couldn't deserialise ByteString"
+
+newtype AuthenticationCredits = AuthenticationCredits {authenticationEmail :: UserEmail}
+    deriving (GHC.Generic, ToJSON, FromJSON)
 
 authenticationAPI :: ServerT AuthenticationHandler App
-authenticationAPI = logIn :<|> logOut
+authenticationAPI = logIn :<|> logOut :<|> verifyToken :<|> register
 
-logIn :: AuthenticationCredits -> App (Headers '[Header "Set-Cookie" String] UserId)
-logIn (AuthenticationCredits uId) = do
-    expire <- liftIO $ fmap (addUTCTime (1 * 24 * 60 * 60)) getCurrentTime -- one days
-    tId <- fmap userId . runQ err404 . getUser $ uId
-    let cookie = defaultSetCookie {
-        setCookieName = cookieTokenKey,
-        setCookieValue = C.pack $ show tId,
-        setCookieExpires = Just expire,
-        setCookiePath = Just "/",
-        setCookieHttpOnly = True,
-        setCookieSecure = True }
-    return $ addHeader (L.unpack . toLazyByteString . renderSetCookie $ cookie) tId
+logIn :: AuthenticationCredits -> App (Headers '[Header "Set-Cookie" String] UserLoginResponse)
+logIn (AuthenticationCredits email') = do
+    let email = T.toLower . T.strip $ email'
+    if (not . validateEmail) email
+        then return . noHeader $ UserLoginResponse InvalidUser
+        else do
+            user <- runQerror $ getUserWithEmail email
+            case user of
+                Nothing -> return . noHeader $ UserLoginResponse UserCanRegister
+                Just User{..} -> do
+                    token <- generateToken userId
+                    runQerror . createToken $ token
+                    let cookie = generateCookie token
+                    case tokenVerificationCode token of
+                        Just code -> do
+                            sendTokenVerificationEmail code email
+                            return . addHeader cookie $ UserLoginResponse UserIsRegistered
+                        Nothing -> throwError err500
 
-logOut :: App (Headers '[Header "Set-Cookie" String] NoContent)
-logOut =
-    let cookie = defaultSetCookie {
+generateCookie :: Token -> String
+generateCookie token = L.unpack . toLazyByteString . renderSetCookie $ defaultSetCookie {
+    setCookieName = cookieTokenKey,
+    setCookieValue = L.toStrict . encode $ AuthenticationCookieData
+        (tokenUserId token)
+        (tokenValue token),
+    setCookieExpires = Just (tokenExpiryDate token),
+    setCookiePath = Just "/",
+    setCookieHttpOnly = True,
+    setCookieSecure = True }
+
+
+verifyToken :: Maybe String -> Int32 -> App NoContent
+verifyToken Nothing _ = throwError err400
+verifyToken (Just cookie) code = do
+    let mbToken = (>>= (decode . L.fromStrict)) . lookup cookieTokenKey . parseCookies . C.pack $ cookie
+    case mbToken of
+        Nothing -> throwError err400
+        (Just (AuthenticationCookieData uId tokenData)) -> do
+            _ <- runQ invalidToken $ tryVerifyToken uId tokenData code
+            return NoContent
+
+logOut :: Maybe String -> App (Headers '[Header "Set-Cookie" String] NoContent)
+logOut cookie' = do
+    _ <- fromMaybe (return ()) $ do
+        cookie <- cookie'
+        AuthenticationCookieData uId tokenData <- (lookup cookieTokenKey . parseCookies . C.pack $ cookie) >>= (decode . L.fromStrict)
+        return . runQsilent $ invalidateToken uId tokenData
+    let newCookie = defaultSetCookie {
         setCookieName = cookieTokenKey,
         setCookieValue = "invalid",
         setCookieExpires = Just (UTCTime (ModifiedJulianDay 0) 0),
         setCookiePath = Just "/" }
-    in return $ addHeader (L.unpack . toLazyByteString . renderSetCookie $ cookie) NoContent
+    return $ addHeader (L.unpack . toLazyByteString . renderSetCookie $ newCookie) NoContent
 
-checkToken :: DBConnection -> BS.ByteString -> Handler UserId
-checkToken conn token = do
-    uId <- case ((readMaybe . C.unpack) token :: Maybe UserId) of
-        Just uId -> return uId
+checkToken :: DBConnection -> AuthenticationCookieData -> Handler UserId
+checkToken conn (AuthenticationCookieData uId tokenData) = do
+    token <- runQ' conn err500 $ getVerifiedToken uId tokenData
+    case token of
         Nothing -> throwError invalidToken
-    fmap userId . runQ' conn invalidToken . getUser $ uId
+        Just (Token newUId _ _ _ _) -> return newUId
+
+register :: UserCreation -> App (Headers '[Header "Set-Cookie" String] NoContent)
+register creation' = do
+    let creation = normalizaUser creation'
+    unless (validateUser creation) $ throwError err400
+    genToken <- generateTokenM
+    token <- runQ err409 . commitedTransactionallyUpdate $ do
+        uId <- createUser creation
+        let token = genToken uId
+        createToken token
+        return token
+    let cookie = generateCookie token
+    return $ addHeader cookie NoContent
+
+normalizaUser :: UserCreation -> UserCreation
+normalizaUser (UserCreation fName mName lName faculty email) =
+    UserCreation
+        (T.strip fName)
+        (T.strip mName)
+        (T.strip lName)
+        (T.strip faculty)
+        (T.toLower . T.strip $ email)
+
+validateUser :: UserCreation -> Bool
+validateUser (UserCreation fName mName lName faculty email) =
+    (not . T.null) fName &&
+    (not . T.null) mName &&
+    (not . T.null) lName &&
+    (not . T.null) faculty &&
+    validateEmail email
 
 authHandler :: DBConnection -> AuthHandler Request UserId
 authHandler conn = mkAuthHandler handler
     where
-        maybeToEither = maybe (Left ()) Right
-        throw = const $ throwError invalidToken
-        handler req = either throw (checkToken conn) $ do
-            cookie <- maybeToEither $ lookup "cookie" $ requestHeaders req
-            maybeToEither $ lookup cookieTokenKey $ parseCookies cookie
+        handler req = do
+            let cookie' = lookup "cookie" $ requestHeaders req
+            case cookie' of
+                Nothing -> throwError (invalidToken)
+                (Just cookie) -> do
+                    let mbToken = (>>= (decode . L.fromStrict)) . lookup cookieTokenKey $ parseCookies cookie
+                    case mbToken of
+                        Nothing -> throwError invalidToken
+                        Just t -> checkToken conn t
 
 cookieTokenKey :: BS.ByteString
-cookieTokenKey = "servant-auth-cookie"
+cookieTokenKey = "valera-denis-auth-cookie"
 
 type instance AuthServerData (AuthProtect "basicAuth") = UserId
 
@@ -114,3 +235,18 @@ genAuthServerContext conn = authHandler conn :. EmptyContext
 
 contextProxy :: Proxy '[AuthHandler Request UserId]
 contextProxy = Proxy
+
+validateEmail :: T.Text -> Bool
+validateEmail "ilyakooo0@gmail.com" = True
+validateEmail "rednikina.com@yandex.ru" = True
+validateEmail "admikhaleva@edu.hse.ru" = True
+validateEmail e = (isJust . matchRegex regex . T.unpack $ e) || (isJust . matchRegex falseRegex . T.unpack $ e)
+    where
+        regex = mkRegexWithOpts
+            "^[A-Z0-9a-z._%-]+@hse\\.ru$"
+            False
+            False
+        falseRegex = mkRegexWithOpts
+            "^[A-Z0-9a-z._%-+]+@edu.hse\\.ru$"
+            False
+            False
