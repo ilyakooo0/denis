@@ -1,13 +1,15 @@
 {-# LANGUAGE
-    DataKinds ,
-    DeriveGeneric ,
+    DataKinds,
+    DeriveGeneric,
     OverloadedLabels,
-    OverloadedStrings ,
-    TypeApplications ,
+    OverloadedStrings,
+    TypeApplications,
     TypeOperators,
     PartialTypeSignatures,
     FlexibleInstances,
-    KindSignatures #-}
+    KindSignatures,
+    DeriveAnyClass,
+    RecordWildCards #-}
 
 {-# OPTIONS_GHC -Wno-partial-type-signatures #-}
 
@@ -16,7 +18,7 @@ module Data.Query (
     Schema,
     createTables,
     getPosts,
-    getUser,
+    -- getUser,
     getUsers,
     getAllUsers,
     getLastPosts,
@@ -43,8 +45,16 @@ module Data.Query (
     getGroupChatForUser,
     getFaculty,
     updateFaculty,
-    getFacultyFromQuery
-) where
+    getFacultyFromQuery,
+    getUserWithEmail,
+    createToken,
+    validateToken,
+    invalidateToken,
+    tryVerifyToken,
+    getVerifiedToken,
+    UserCreation(..),
+    createUser
+    ) where
 
 import Squeal.PostgreSQL
 import Data.User
@@ -83,6 +93,9 @@ import Data.Faculty
 import Data.ByteString (ByteString)
 import Data.Foldable (fold)
 import Data.Char
+import qualified Data.Vector as V
+import Server.Auth.Token
+import Data.Int
 
 -- MARK: Documentation
 
@@ -145,26 +158,68 @@ getPostQ oTe te = select (
 --     let rows = M.fromList $ map (tupleBy $ quoteRowId . head) . groupBy ((==) `on` quoteRowId) . sortBy (compare `on` quoteRowId) $ rows'
 --     return $ M.lookup qId rows >>= rowsToQuote rows
 
-getUserQ :: Query Schema (TuplePG (Only UserId)) (RowPG User)
-getUserQ = selectStar $ from (table #users) & where_ (#userId .== param @1)
+getUserWithEmailQ :: Query Schema (TuplePG (Only UserEmail)) (RowPG (User FacultyUrl))
+getUserWithEmailQ = select (
+    #userRowId `as` #userId :*
+    #userRowFirstName `as` #firstName :*
+    #userRowMiddleName `as` #middleName :*
+    #userRowLastName `as` #lastName :*
+    #userRowFacultyUrl `as` #userFaculty :*
+    #userRowEmail `as` #userEmail
+    ) (from (table #users) &
+    where_ (#userRowEmail .== param @1) &
+    where_ (notNull #userRowIsValidated))
 
 verifiedUserIdsQ :: [UserId] -> Maybe (Query Schema '[] (RowPG (Only UserId)))
 verifiedUserIdsQ uIds = case idsToColumn uIds of
-    Just idQ -> Just $ select (#users ! #userId `as` #fromOnly) $ from (subquery (idQ `As` #ids) &
+    Just idQ -> Just $ select (#users ! #userRowId `as` #fromOnly) $ from (subquery (idQ `As` #ids) &
         innerJoin (table #users)
-            (#ids ! #id .== #users ! #userId))
+            (#ids ! #id .== #users ! #userRowId))
     Nothing -> Nothing
 
-
-getUsersQ :: [UserId] -> Maybe (Query Schema '[] (RowPG User))
+getUsersQ :: [UserId] -> Maybe (Query Schema '[] (RowPG UserRow))
 getUsersQ uIds = case idsToColumn uIds of
-    Just idQ -> Just $ selectDotStar #users $ from (subquery (idQ `As` #ids) &
+    Just idQ -> Just $ select (
+            #users ! #userRowId :*
+            #users ! #userRowFirstName :*
+            #users ! #userRowMiddleName :*
+            #users ! #userRowLastName :*
+            #users ! #userRowFacultyUrl :*
+            #users ! #userRowEmail :*
+            #users ! #userRowIsValidated :*
+            #faculties ! #facultyName `as` #userRowFacultyName :*
+            #faculties ! #facultyUrl `as` #userRowFacultyURL :*
+            #faculties ! #facultyPath `as` #userRowFacultyPath :*
+            #faculties ! #facultyCampusName `as` #userRowFacultyCampusName :*
+            #faculties ! #facultyCampusCode `as` #userRowFacultyCampusCode :*
+            #faculties ! #facultyTags `as` #userRowFacultyTags
+        ) (from (subquery (idQ `As` #ids) &
         innerJoin (table #users)
-            (#ids ! #id .== #users ! #userId))
+            (#ids ! #id .== #users ! #userRowId) &
+        innerJoin (table #faculties)
+            (#users ! #userRowFacultyUrl .== #faculties ! #facultyUrl)) &
+            where_ (notNull $ #users ! #userRowIsValidated))
     Nothing -> Nothing
 
-getAllUsersQ :: Query Schema '[] (RowPG User)
-getAllUsersQ = selectStar $ from $ table #users
+getAllUsersQ :: Query Schema '[] (RowPG UserRow)
+getAllUsersQ = select (
+            #users ! #userRowId :*
+            #users ! #userRowFirstName :*
+            #users ! #userRowMiddleName :*
+            #users ! #userRowLastName :*
+            #users ! #userRowFacultyUrl :*
+            #users ! #userRowEmail :*
+            #users ! #userRowIsValidated :*
+            #faculties ! #facultyName `as` #userRowFacultyName :*
+            #faculties ! #facultyUrl `as` #userRowFacultyURL :*
+            #faculties ! #facultyPath `as` #userRowFacultyPath :*
+            #faculties ! #facultyCampusName `as` #userRowFacultyCampusName :*
+            #faculties ! #facultyCampusCode `as` #userRowFacultyCampusCode :*
+            #faculties ! #facultyTags `as` #userRowFacultyTags
+        ) (from ((table #users) &
+        innerJoin (table #faculties)
+            (#users ! #userRowFacultyUrl .== #faculties ! #facultyUrl))&
+            where_ (notNull $ #users ! #userRowIsValidated))
 
 getPostsByIdQ :: [PostId] -> Maybe (Query Schema '[] (RowPG PostRowResponse))
 getPostsByIdQ pIds = case idsToColumn pIds of
@@ -236,7 +291,7 @@ updateFacultyQ :: Manipulation Schema (TuplePG Faculty) '[]
 updateFacultyQ = insertRow #faculties
     (
     Set (param @1) `as` #facultyName :*
-    Set (param @2) `as` #facultyURL :*
+    Set (param @2) `as` #facultyUrl :*
     Set (param @3) `as` #facultyPath :*
     Set (param @4) `as` #facultyCampusName :*
     Set (param @5) `as` #facultyCampusCode :*
@@ -247,7 +302,7 @@ updateFacultyQ = insertRow #faculties
 
 getFacultyQ :: Query Schema (TuplePG (Only Text)) (RowPG Faculty)
 getFacultyQ = selectStar (from (table #faculties) &
-        where_ (#facultyURL .== param @1))
+        where_ (#facultyUrl .== param @1))
 
 createNamedChannelQ :: Manipulation Schema (TuplePG NamedChannelCreation) (RowPG (Only NamedChannelId))
 createNamedChannelQ = insertRow #channels
@@ -503,17 +558,97 @@ textArrayToText
     -> Expression schema from grouping params ('NotNull  'PGtext)
 textArrayToText = fold . L.intersperse space
 
+createUserQ :: Manipulation Schema (TuplePG UserCreation) (RowPG (Only UserId))
+createUserQ = insertRow #users (
+    Default `as` #userRowId :*
+    Set (param @1) `as` #userRowFirstName :*
+    Set (param @2) `as` #userRowMiddleName :*
+    Set (param @3) `as` #userRowLastName :*
+    Set (param @4) `as` #userRowFacultyUrl :*
+    Set (param @5) `as` #userRowEmail :*
+    Set false `as` #userRowIsValidated)
+    OnConflictDoRaise
+    (Returning (#userRowId `as` #fromOnly))
+
+removeUnverifiedUserQ :: Manipulation Schema (TuplePG (Only UserEmail)) '[]
+removeUnverifiedUserQ = deleteFrom_ #users
+    (#userRowEmail .== param @1 .&&
+        (not_ . notNull $ #userRowIsValidated))
+
+
+createTokenQ :: Manipulation Schema (TuplePG Token) '[]
+createTokenQ = insertRow_ #tokens (
+        Set (param @1) `as` #tokenUserId :*
+        Set (param @2) `as` #tokenValue :*
+        Set (param @3) `as` #tokenExpiryDate :*
+        Set (param @4) `as` #tokenVerificationCode :*
+        Set (param @5) `as` #tokenActivationTriesLeft
+    )
+
+updateTokenQ :: Manipulation Schema (TuplePG Token) '[]
+updateTokenQ = update_ #tokens (
+        Same `as` #tokenUserId :*
+        Same `as` #tokenValue :*
+        Same `as` #tokenExpiryDate :*
+        Set (param @4) `as` #tokenVerificationCode :*
+        Set (param @5) `as` #tokenActivationTriesLeft)
+    (#tokenUserId .== param @1 .&& #tokenValue .== param @2)
+
+deleteTokenQ :: Manipulation Schema (TuplePG (UserId, ByteString)) '[]
+deleteTokenQ = deleteFrom_ #tokens
+    (#tokenUserId .== param @1 .&& #tokenValue .== param @2)
+
+validateUserQ :: Manipulation Schema (TuplePG (Only UserId)) '[]
+validateUserQ = update_ #users (
+    Same `as` #userRowId :*
+    Same `as` #userRowFirstName :*
+    Same `as` #userRowMiddleName :*
+    Same `as` #userRowLastName :*
+    Same `as` #userRowFacultyUrl :*
+    Same `as` #userRowEmail :*
+    Set true `as` #userRowIsValidated)
+    (#userRowId .== param @1)
+
+getTokenQ :: Query Schema (TuplePG (UserId, ByteString)) (RowPG Token)
+getTokenQ = selectStar (from (table #tokens) &
+    where_ (#tokenUserId .== param @1 .&&
+        #tokenValue .== param @2))
+
+getVerifiedTokenQ :: Query Schema (TuplePG (UserId, ByteString)) (RowPG Token)
+getVerifiedTokenQ = selectStar (from (table #tokens) &
+    where_ (#tokenUserId .== param @1 .&&
+        #tokenValue .== param @2 .&&
+        isNull #tokenVerificationCode))
+
 -- MARK: FrontEnd Data Structures
+
+data UserCreation = UserCreation {
+    userCreationFirstName :: Text,
+    userCreationMiddleName :: Text,
+    userCreationLastName :: Text,
+    userCreationUserFaculty :: FacultyUrl,
+    userCreationUserEmail :: Text
+} deriving (GHC.Generic, SOP.Generic, SOP.HasDatatypeInfo)
+
+instance ToJSON UserCreation where
+    toJSON (UserCreation fName mName lName faculty email) = object [
+        "firstName" .= fName,
+        "middleName" .= mName,
+        "lastName" .= lName,
+        "faculty" .= faculty,
+        "email" .= email
+        ]
+
+instance FromJSON UserCreation where
+    parseJSON = withObject "named channel" $ \e ->
+        UserCreation <$> e .: "firstName" <*> e .: "middleName" <*> e .: "lastName" <*> e .: "faculty" <*> e .: "email"
 
 data NamedChannelCreation = NamedChannelCreation {
     namedChannelCreationOwner :: UserId,
     namedChannelCreationName :: Text,
     namedChannelCreationTags :: Vector Text,
     namedChannelCreationPeopleIds :: Vector UserId
-} deriving GHC.Generic
-
-instance SOP.Generic NamedChannelCreation
-instance SOP.HasDatatypeInfo NamedChannelCreation
+} deriving (GHC.Generic, SOP.Generic, SOP.HasDatatypeInfo)
 
 addUserToChannelCreate :: UserId -> NamedChannelCreationRequest -> NamedChannelCreation
 addUserToChannelCreate uId (NamedChannelCreationRequest cName cTags cPeople) = NamedChannelCreation uId cName cTags cPeople
@@ -562,7 +697,12 @@ deleteGroupChat gId = do
         deleteGroupChatMessagesQ = deleteFrom_ #messages
             (#messageStorageDestinationGroupId .== param @1)
 
-
+-- NOTE: Not transactional
+createUser :: UserCreation -> StaticPQ UserId
+createUser creation = do
+    _ <- manipulateParams removeUnverifiedUserQ (Only $ userCreationUserEmail creation)
+    rowThing <- manipulateParams createUserQ creation >>= firstRow >>= fromMaybe500
+    return (fromOnly rowThing)
 
 -- MARK: FrontEnd functions
 
@@ -594,14 +734,14 @@ getLastPosts pId lim dir = do
     postRows <- runQueryParams (getLastPostsQ id lim dir) (Only pId) >>= getRows
     rowsToPosts postRows `liftMaybe` wrapIntoResponse
 
-getUser :: UserId -> StaticPQ User
-getUser uId = runQueryParams getUserQ (Only uId) >>= getRow 0
+getUserWithEmail :: UserEmail -> StaticPQ (Maybe (User FacultyUrl))
+getUserWithEmail email = runQueryParams getUserWithEmailQ (Only email) >>= firstRow
 
-getUsers :: [UserId] -> StaticPQ (Maybe [User])
-getUsers ids = getUsersQ ids `liftMaybe` (fmap Just . (runQuery >=> getRows))
+getUsers :: [UserId] -> StaticPQ (Maybe [User Faculty])
+getUsers ids = getUsersQ ids `liftMaybe` (fmap (Just . map rowToUser) . (runQuery >=> getRows))
 
-getAllUsers :: StaticPQ [User]
-getAllUsers = runQuery getAllUsersQ >>= getRows
+getAllUsers :: StaticPQ [User Faculty]
+getAllUsers = fmap rowToUser <$> (runQuery getAllUsersQ >>= getRows)
 
 publishPost :: UserId -> PostCreation -> StaticPQ PostId
 publishPost uId pc  = commitedTransactionallyUpdate $ do
@@ -753,7 +893,71 @@ getFacultyFromQuery :: T.Text -> StaticPQ [Faculty]
 getFacultyFromQuery query =
     runQueryParams getFacultySearchResultQ (Only . queryFromText $ query) >>= getRows
 
+createToken :: Token -> StaticPQ ()
+createToken token = void $ manipulateParams createTokenQ token
+
+validateToken :: Token -> StaticPQ ()
+validateToken token = commitedTransactionallyUpdate $ do
+    void $ manipulateParams updateTokenQ token{tokenVerificationCode = Nothing}
+    void $ manipulateParams validateUserQ $ Only $ tokenUserId token
+
+invalidateToken :: UserId -> ByteString -> StaticPQ ()
+invalidateToken uId bs = void . manipulateParams deleteTokenQ $ (uId, bs)
+
+tryVerifyToken :: UserId -> ByteString -> Int32 -> StaticPQ (Maybe Token)
+tryVerifyToken uId tokenData code = commitedTransactionallyUpdate $ do
+    token' <- runQueryParams getTokenQ (uId, tokenData) >>= firstRow
+    case token' of
+        Nothing -> return Nothing
+        Just token -> do
+            if (tokenVerificationCode token == Just code)
+                then validateToken token >> (return $ Just token)
+                else do
+                    let triesLeft = tokenActivationTriesLeft token - 1
+                    if triesLeft <= 0
+                        then invalidateToken (tokenUserId token) (tokenValue token) >> return Nothing
+                        else do
+                            let newToken = token{tokenActivationTriesLeft = triesLeft}
+                            _ <- manipulateParams updateTokenQ newToken
+                            return Nothing
+
+getVerifiedToken :: UserId -> ByteString -> StaticPQ (Maybe Token)
+getVerifiedToken uId tokenData = runQueryParams getVerifiedTokenQ (uId, tokenData) >>= firstRow
+
 -- MARK: Utils
+
+data UserRow = UserRow {
+    userRowId :: UserId,
+    userRowFirstName :: Text,
+    userRowMiddleName :: Text,
+    userRowLastName :: Text,
+    userRowFacultyUrl :: FacultyUrl,
+    userRowEmail :: Text,
+    userRowIsValidated :: Bool,
+    userRowFacultyName :: T.Text,
+    userRowFacultyURL :: FacultyUrl,
+    userRowFacultyPath :: T.Text,
+    userRowFacultyCampusName :: T.Text,
+    userRowFacultyCampusCode :: T.Text,
+    userRowFacultyTags :: V.Vector T.Text
+} deriving (GHC.Generic, SOP.Generic, SOP.HasDatatypeInfo)
+
+rowToUser :: UserRow -> User Faculty
+rowToUser UserRow{..} = User {
+        userId = userRowId,
+        firstName = userRowFirstName,
+        middleName = userRowMiddleName,
+        lastName = userRowLastName,
+        userFaculty = Faculty {
+            facultyName = userRowFacultyName,
+            facultyUrl = userRowFacultyURL,
+            facultyPath = userRowFacultyPath,
+            facultyCampusName = userRowFacultyCampusName,
+            facultyCampusCode = userRowFacultyCampusCode,
+            facultyTags = userRowFacultyTags
+        },
+        userEmail = userRowEmail
+    }
 
 queryFromText :: Text -> Text
 queryFromText = T.unwords . L.intersperse "&" . map (`T.append` ":*") . filter (not . T.null) . T.split (not . isAlphaNum)
@@ -788,7 +992,7 @@ unsafeIntToExpr = UnsafeExpression . pack . show
 
 data ResponseWithUsers r = ResponseWithUsers {
     response :: r,
-    users :: M.Map UserId User
+    users :: M.Map UserId (User Faculty)
 } deriving (Generic)
 
 instance (ToJSON r) => ToJSON (ResponseWithUsers r)

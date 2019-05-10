@@ -21,14 +21,21 @@ import Control.Concurrent
 import Data.Faculty.Parser
 import Data.Connection
 import Data.Query
-
+import Crypto.RNG
 import Network.Wai.Middleware.Cors
-
 
 getDBString :: IO B.ByteString
 getDBString = do
     mDatabaseURL <- lookupEnv "DATABASE_URL"
     return $ B.pack $ fromMaybe "host=localhost port=5432 dbname=postgres connect_timeout=10" mDatabaseURL
+
+getMailConfig :: IO MailConfig
+getMailConfig = do
+    (Just host) <- lookupEnv "MAIL_HOST"
+    port <- (fromMaybe 25 . fmap read) <$> lookupEnv "MAIL_PORT"
+    (Just user) <- lookupEnv "MAIL_USER"
+    (Just pass) <- lookupEnv "MAIL_PASS"
+    return $ MailConfig host port user pass
 
 getServerPort :: IO Int
 getServerPort = maybe 2000 read <$> lookupEnv "PORT"
@@ -37,7 +44,10 @@ getConfig :: IO Config
 getConfig = do
     databaseURL <- getDBString
     conn <- createConnectionPool databaseURL 3 0.5 10
-    return $ Config conn
+    crypto <- newCryptoRNGState
+    -- (Jusr selfRoot) <- lookupEnv "SELF_ROOT_URL"
+    mail <- getMailConfig
+    return $ Config conn crypto mail
 
 runServer :: IO ()
 runServer = do

@@ -4,7 +4,9 @@
     OverloadedLabels,
     OverloadedStrings ,
     TypeApplications ,
-    TypeOperators #-}
+    TypeOperators,
+    TypeSynonymInstances,
+    FlexibleInstances #-}
 
 module Server.App (
     App,
@@ -12,7 +14,8 @@ module Server.App (
     Config(..),
     ask,
     asks,
-    liftIO
+    liftIO,
+    MailConfig(..)
 ) where
 
 import Servant.Server
@@ -21,12 +24,25 @@ import Squeal.PostgreSQL.Pool
 import Data.Schema
 import Generics.SOP (K)
 import Squeal.PostgreSQL.PQ (Connection)
-import Control.Monad.IO.Class ()
+import Crypto.RNG
 
-type App = ReaderT Config Handler 
+type App = ReaderT Config Handler
 
 type DBConnection = Pool (K Connection Schema)
 
 data Config = Config {
-    getPool :: DBConnection
+    getPool :: !DBConnection,
+    cryptoState :: !CryptoRNGState,
+    -- selfRootUrl :: !String,
+    mailConfig :: !MailConfig
 }
+
+data MailConfig = MailConfig {
+    mailHost :: !String,
+    mailPort :: !Int,
+    mailUser :: !String,
+    mailPassword :: !String
+}
+
+instance CryptoRNG App where
+    randomBytes n = join $ asks (liftIO . randomBytesIO n . cryptoState)

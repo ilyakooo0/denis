@@ -25,6 +25,8 @@ import qualified Data.Text.IO as T
 import Servant.Server.Experimental.Auth
 import Network.Wai
 import Server.API.Messages
+import Server.API.Faculty
+
 docsWriter :: HasDocs api => String -> Proxy api -> IO ()
 docsWriter file = writeFile ("docs/" ++ file ++ ".md") . normalizer . markdown . docs
 
@@ -36,6 +38,7 @@ main = do
         Authentication :> "authentication" :> "me" :> Post '[JSON] UserId ))
     docsWriter "channels" $ pretty (Proxy :: Proxy ("channels" :> ChannelsApi))
     T.writeFile ("docs/Home.md") . (\t -> "```\n" <> t <> "```\n") $ layoutWithContext serverProxy (undefined :: Context (AuthHandler Request UserId ': '[]))
+    docsWriter "faculty" $ pretty (Proxy :: Proxy ("faculty" :> FacultyAPI))
 
 
 instance ToSample Char where

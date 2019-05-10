@@ -55,8 +55,12 @@ dependencies:
 - req
 - data-default
 - lens
-
+- crypto-rng
 - wai-cors
+- base64-bytestring
+- regex-compat
+- smtp-mail
+- mime-mail
 
 
 
