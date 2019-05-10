@@ -52,6 +52,8 @@ import Data.Maybe
 import Server.Auth.Token
 import Server.Auth.Mail
 import Data.Int
+import Web.UAParser
+import qualified Data.Text.Lazy as TL
 
 -- MARK: Documentation
 
@@ -80,6 +82,7 @@ type RegisterDescription = Description "Register the user for a new account.\n\n
 type AuthenticationHandler =
     "login" :> LoginDescription :>
         ReqBody '[JSON] AuthenticationCredits :>
+        Header "User-Agent" String :>
         Post '[JSON] (Headers '[Header "Set-Cookie" String] UserLoginResponse) :<|>
     "logout" :> LogoutDescription
         :> Header "cookie" String
@@ -87,7 +90,9 @@ type AuthenticationHandler =
     "verify" :> VerifyDescription :>
         Header "cookie" String :> ReqBody '[JSON] Int32 :> PostNoContent '[JSON, PlainText, FormUrlEncoded] NoContent :<|>
     "register" :> RegisterDescription :>
-        ReqBody '[JSON] UserCreation :> PostNoContent '[JSON, PlainText, FormUrlEncoded] (Headers '[Header "Set-Cookie" String] NoContent)
+        ReqBody '[JSON] UserCreation :>
+        Header "User-Agent" String :>
+        PostNoContent '[JSON, PlainText, FormUrlEncoded] (Headers '[Header "Set-Cookie" String] NoContent)
 
 data UserResponseStatus = UserIsRegistered | UserCanRegister | InvalidUser
     deriving (Show)
@@ -121,8 +126,8 @@ newtype AuthenticationCredits = AuthenticationCredits {authenticationEmail :: Us
 authenticationAPI :: ServerT AuthenticationHandler App
 authenticationAPI = logIn :<|> logOut :<|> verifyToken :<|> register
 
-logIn :: AuthenticationCredits -> App (Headers '[Header "Set-Cookie" String] UserLoginResponse)
-logIn (AuthenticationCredits email') = do
+logIn :: AuthenticationCredits -> Maybe String -> App (Headers '[Header "Set-Cookie" String] UserLoginResponse)
+logIn (AuthenticationCredits email') ua' = do
     let email = T.toLower . T.strip $ email'
     if (not . validateEmail) email
         then return . noHeader $ UserLoginResponse InvalidUser
@@ -131,12 +136,13 @@ logIn (AuthenticationCredits email') = do
             case user of
                 Nothing -> return . noHeader $ UserLoginResponse UserCanRegister
                 Just User{..} -> do
-                    token <- generateToken userId
+                    let ua = getUserAgent ua'
+                    token <- generateToken userId ua
                     runQerror . createToken $ token
                     let cookie = generateCookie token
                     case tokenVerificationCode token of
                         Just code -> do
-                            sendTokenVerificationEmail code email
+                            sendTokenVerificationEmail code (TL.fromStrict ua) email
                             return . addHeader cookie $ UserLoginResponse UserIsRegistered
                         Nothing -> throwError err500
 
@@ -182,24 +188,28 @@ checkToken conn (AuthenticationCookieData uId tokenData) = do
     token <- runQ' conn err500 $ getVerifiedToken uId tokenData
     case token of
         Nothing -> throwError invalidToken
-        Just (Token newUId _ _ _ _) -> return newUId
+        Just (Token newUId _ _ _ _ _ _ _) -> return newUId
 
-register :: UserCreation -> App (Headers '[Header "Set-Cookie" String] NoContent)
-register creation' = do
+register :: UserCreation -> Maybe String -> App (Headers '[Header "Set-Cookie" String] NoContent)
+register creation' ua' = do
     let creation = normalizaUser creation'
     unless (validateUser creation) $ throwError err400
     genToken <- generateTokenM
+    let ua = getUserAgent ua'
     token <- runQ err409 . commitedTransactionallyUpdate $ do
         uId <- createUser creation
-        let token = genToken uId
+        let token = genToken uId ua
         createToken token
         return token
     case tokenVerificationCode token of
         Just code -> do
-            sendTokenVerificationEmail code (userCreationUserEmail creation)
+            sendTokenVerificationEmail code (TL.fromStrict ua) (userCreationUserEmail creation)
             let cookie = generateCookie token
             return $ addHeader cookie NoContent
         Nothing -> throwError err500
+
+getUserAgent :: Maybe String -> T.Text
+getUserAgent = fromMaybe "Unknown" . fmap osrFamily . join . fmap parseOS . fmap C.pack
 
 normalizaUser :: UserCreation -> UserCreation
 normalizaUser (UserCreation fName mName lName faculty email) =

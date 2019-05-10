@@ -61,6 +61,8 @@ dependencies:
 - regex-compat
 - smtp-mail
 - mime-mail
+- periodic
+- ua-parser
 
 
 

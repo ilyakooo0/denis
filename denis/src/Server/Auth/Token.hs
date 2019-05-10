@@ -24,6 +24,7 @@ import qualified GHC.Generics as GHC
 import Data.Int
 import Control.Monad.IO.Class
 import Crypto.RNG
+import Data.Text (Text)
 
 type TokenVerificationCode = Int32
 
@@ -32,17 +33,22 @@ data Token = Token {
     tokenValue :: ByteString,
     tokenExpiryDate :: UTCTime,
     tokenVerificationCode :: Maybe TokenVerificationCode,
-    tokenActivationTriesLeft :: Int32
+    tokenActivationTriesLeft :: Int32,
+    tokenUserAgent :: Text,
+    tokenActivationCode :: Maybe ByteString,
+    tokenDeactivationCode :: ByteString
 } deriving (Show, GHC.Generic, SOP.Generic, SOP.HasDatatypeInfo)
 
-generateToken :: (MonadIO m, CryptoRNG m) => UserId -> m Token
-generateToken uId = do
+generateToken :: (MonadIO m, CryptoRNG m) => UserId -> Text -> m Token
+generateToken uId ua = do
     gen <- generateTokenM
-    return $ gen uId
+    return $ gen uId ua
 
-generateTokenM :: (MonadIO m, CryptoRNG m) => m (UserId -> Token)
+generateTokenM :: (MonadIO m, CryptoRNG m) => m (UserId -> Text -> Token)
 generateTokenM = do
     token <- randomBytes 64
+    activationToken <- randomBytes 64
+    deactivationToken <- randomBytes 64
     code <- randomR (0, 999999)
     expire <- liftIO $ fmap (addUTCTime (nominalDay * 365)) getCurrentTime -- one year
-    return $ \ uId -> Token uId token expire (Just code) 10
+    return $ \ uId ua -> Token uId token expire (Just code) 10 ua (Just activationToken) deactivationToken
