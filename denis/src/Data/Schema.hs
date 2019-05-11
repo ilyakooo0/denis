@@ -29,7 +29,8 @@ type Schema =
                 "facultyPath" ::: 'NoDef :=> 'NotNull 'PGtext,
                 "facultyCampusName" ::: 'NoDef :=> 'NotNull 'PGtext,
                 "facultyCampusCode" ::: 'NoDef :=> 'NotNull 'PGtext,
-                "facultyTags" ::: 'NoDef :=> 'NotNull ('PGvararray ('NotNull 'PGtext))
+                "facultyTags" ::: 'NoDef :=> 'NotNull ('PGvararray ('NotNull 'PGtext)),
+                "facultyAddress" ::: 'NoDef :=> 'NotNull 'PGtext
             ]),
         "users" ::: 'Table ( '[
             "pk_users" ::: 'PrimaryKey '["userRowId"],
@@ -195,7 +196,8 @@ createTables = createTable #faculties (
         notNullable text `as` #facultyPath :*
         notNullable text `as` #facultyCampusName :*
         notNullable text `as` #facultyCampusCode :*
-        notNullable (vararray text) `as` #facultyTags
+        notNullable (vararray text) `as` #facultyTags :*
+        notNullable text `as` #facultyAddress
         ) (
             primaryKey #facultyUrl `as` #pk_faculties
         ) >>> createTable #users (

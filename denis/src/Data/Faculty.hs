@@ -21,8 +21,8 @@ import qualified Data.Vector as V
 import Servant.Docs
 
 instance ToSample Faculty where
-    toSamples _ = singleSample $ Faculty "name" "cs.hse.ru/bse" "ФКН -> ПИ" "Москва" "193729"
-        (V.fromList ["Программирование", "Естсественные науки"])
+    toSamples _ = singleSample $ Faculty "ПИ" "cs.hse.ru/bse" "ФКН -> ПИ" "Москва" "193729"
+        (V.fromList ["Программирование", "Естсественные науки"]) "Настоящий адрес факультета"
 
 type FacultyUrl = T.Text
 
@@ -32,17 +32,19 @@ data Faculty = Faculty {
     facultyPath :: T.Text,
     facultyCampusName :: T.Text,
     facultyCampusCode :: T.Text,
-    facultyTags :: V.Vector T.Text
+    facultyTags :: V.Vector T.Text,
+    facultyAddress :: T.Text
 } deriving (GHC.Generic, Show, SOP.Generic, SOP.HasDatatypeInfo)
 
 instance ToJSON Faculty where
-    toJSON (Faculty name url p campusName campusCode tags) = object [
+    toJSON (Faculty name url p campusName campusCode tags address) = object [
         "name" .= name,
         "url" .= url,
         "path" .= p,
         "campusName" .= campusName,
         "campusCode" .= campusCode,
-        "tags" .= tags
+        "tags" .= tags,
+        "address" .= address
         ]
 
 instance FromJSON Faculty where
@@ -53,4 +55,5 @@ instance FromJSON Faculty where
             e .: "path" <*>
             e .: "campusName" <*>
             e .: "campusCode" <*>
-            e .: "tags"
+            e .: "tags" <*>
+            e .: "address"

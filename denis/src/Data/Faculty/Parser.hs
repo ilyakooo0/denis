@@ -64,7 +64,8 @@ getFacultiesForCampus (Campus cName cCode) = do
                     else Just ()
                 let tags = map (T.strip . snd) . texts' mempty . map (NodeElement) . filter (classIs "with-indent small tag-set") $ els
                 let path = T.unwords . map (T.strip . snd) . texts' mempty . map (NodeElement) . filter (classIs "small") $ els
-                return $ Faculty name url path cName cCode (V.fromList tags)
+                let address = T.unwords . map (T.strip . snd) . texts' mempty . map (NodeElement) . filter (classIs "link link_dark i") $ els
+                return $ Faculty name url path cName cCode (V.fromList tags) address
 
 classIs :: T.Text -> Element -> Bool
 classIs c = (== (Just c)) . HM.lookup "class" . eltAttrs

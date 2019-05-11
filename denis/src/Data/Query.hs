@@ -192,7 +192,8 @@ getUsersQ uIds = case idsToColumn uIds of
             #faculties ! #facultyPath `as` #userRowFacultyPath :*
             #faculties ! #facultyCampusName `as` #userRowFacultyCampusName :*
             #faculties ! #facultyCampusCode `as` #userRowFacultyCampusCode :*
-            #faculties ! #facultyTags `as` #userRowFacultyTags
+            #faculties ! #facultyTags `as` #userRowFacultyTags :*
+            #faculties ! #facultyAddress `as` #userRowFacultyAddress
         ) (from (subquery (idQ `As` #ids) &
         innerJoin (table #users)
             (#ids ! #id .== #users ! #userRowId) &
@@ -215,7 +216,8 @@ getAllUsersQ = select (
             #faculties ! #facultyPath `as` #userRowFacultyPath :*
             #faculties ! #facultyCampusName `as` #userRowFacultyCampusName :*
             #faculties ! #facultyCampusCode `as` #userRowFacultyCampusCode :*
-            #faculties ! #facultyTags `as` #userRowFacultyTags
+            #faculties ! #facultyTags `as` #userRowFacultyTags :*
+            #faculties ! #facultyAddress `as` #userRowFacultyAddress
         ) (from ((table #users) &
         innerJoin (table #faculties)
             (#users ! #userRowFacultyUrl .== #faculties ! #facultyUrl))&
@@ -295,7 +297,8 @@ updateFacultyQ = insertRow #faculties
     Set (param @3) `as` #facultyPath :*
     Set (param @4) `as` #facultyCampusName :*
     Set (param @5) `as` #facultyCampusCode :*
-    Set (param @6) `as` #facultyTags
+    Set (param @6) `as` #facultyTags :*
+    Set (param @7) `as` #facultyAddress
     )
     (OnConflictDoNothing)
     (Returning Nil)
@@ -949,7 +952,8 @@ data UserRow = UserRow {
     userRowFacultyPath :: T.Text,
     userRowFacultyCampusName :: T.Text,
     userRowFacultyCampusCode :: T.Text,
-    userRowFacultyTags :: V.Vector T.Text
+    userRowFacultyTags :: V.Vector T.Text,
+    userRowFacultyAddress :: T.Text
 } deriving (GHC.Generic, SOP.Generic, SOP.HasDatatypeInfo)
 
 rowToUser :: UserRow -> User Faculty
@@ -964,7 +968,8 @@ rowToUser UserRow{..} = User {
             facultyPath = userRowFacultyPath,
             facultyCampusName = userRowFacultyCampusName,
             facultyCampusCode = userRowFacultyCampusCode,
-            facultyTags = userRowFacultyTags
+            facultyTags = userRowFacultyTags,
+            facultyAddress = userRowFacultyAddress
         },
         userEmail = userRowEmail
     }
