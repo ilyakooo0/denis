@@ -211,7 +211,7 @@ createTables = createTable #faculties (
         ) (
         primaryKey #userRowId `as` #pk_users :*
         unique #userRowEmail `as` #user_email :*
-        foreignKey #userRowFacultyUrl #faculties #facultyUrl OnDeleteCascade OnUpdateCascade `as` #fk_user_faculty
+        foreignKey #userRowFacultyUrl #faculties #facultyUrl OnDeleteRestrict OnUpdateCascade `as` #fk_user_faculty
     ) >>> createTable #posts (
         serial8 `as` #postRowId :*
         notNullable int8 `as` #postRowAuthorId :*
