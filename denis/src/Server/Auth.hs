@@ -221,7 +221,17 @@ register creation' ua' = do
         Nothing -> throwError err500
 
 getUserAgent :: Maybe String -> T.Text
-getUserAgent = fromMaybe "Unknown" . fmap osrFamily . join . fmap parseOS . fmap C.pack
+getUserAgent uaData' = fromMaybe "Unknown" $ do
+    uaData <- fmap C.pack uaData'
+    let os = osrFamily <$> parseOS uaData
+    let browser = uarFamily <$> parseUA uaData
+    foldl mappendMaybe Nothing $ [os, browser]
+    where
+        mappendMaybe :: (Semigroup a) => Maybe a -> Maybe a -> Maybe a
+        mappendMaybe Nothing (Just a) = Just a
+        mappendMaybe (Just a) Nothing = Just a
+        mappendMaybe (Just a) (Just b) = Just (a <> b)
+        mappendMaybe Nothing Nothing = Nothing
 
 normalizaUser :: UserCreation -> UserCreation
 normalizaUser (UserCreation fName mName lName faculty email) =
