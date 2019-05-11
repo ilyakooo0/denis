@@ -18,11 +18,7 @@ import Data.Tags.Completions
 import Server.App
 import Data.Connection
 import Data.Query
-import qualified Data.Text as T
-import qualified Data.Post as P
-import Data.PostElement
-import Data.Tags.Suggestions
-import Data.List
+import Data.Text (Text)
 
 type CompletionsDescription = Description "\
     \Gets tag completion tree\n\n\
@@ -63,18 +59,16 @@ type CompletionsDescription = Description "\
     \}\n\
     \```"
 
-type SuggestionDescription = Description "Retuens suggested tags for given post element objects."
+type SearchDescription = Description "Returns tag completions for given user input."
 
-type TagsAPI = "completions" :> CompletionsDescription :> Get '[JSON] (CompletionTree Char)
-    :<|> "suggest" :> SuggestionDescription :> ReqBody '[JSON] [PostElement P.Post] :> Post '[JSON] [T.Text]
+type TagsAPI = "completions" :> CompletionsDescription :> Get '[JSON] CompletionTree :<|>
+    "search" :> SearchDescription :> ReqBody '[JSON, PlainText] Text :> Post '[JSON] [Text]
 
 tagsServer :: ServerT TagsAPI App
-tagsServer = completionHandler :<|> suggestionHandler
+tagsServer = completionHandler :<|> tagSearch
 
-completionHandler :: App (CompletionTree Char)
-completionHandler = runQerror $ mkCompletionTree <$> getTags
+completionHandler :: App CompletionTree
+completionHandler = runQerror $ mkCompletionTree <$> getTags 1000
 
-suggestionHandler :: [PostElement P.Post] -> App [T.Text]
-suggestionHandler = return . suggestTags . T.concat . intersperse " " . concatMap (\case
-    Markdown t -> T.words t
-    _ -> [])
+tagSearch :: Text -> App [Text]
+tagSearch = runQerror . searchTags
