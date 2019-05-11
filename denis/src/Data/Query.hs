@@ -974,7 +974,14 @@ rowToUser UserRow{..} = User {
     }
 
 queryFromText :: Text -> Text
-queryFromText = T.unwords . L.intersperse "&" . map (`T.append` ":*") . filter (not . T.null) . T.split (not . isAlphaNum)
+queryFromText = T.unwords . L.intersperse "&" . map processTerm . filter (not . T.null) . T.split (not . isAlphaNum)
+    where
+        processTerm :: Text -> Text
+        processTerm t = "(" <> t <> ":*" <> (
+            if T.length t <= 5
+                then (" | (" <>) . (<> ")") . T.unwords . L.intersperse "<->" . map (<> ":*") . map T.singleton . T.unpack $ t
+                else mempty
+            ) <> ")"
 
 directionToOperator
     :: P.PaginationDirection
