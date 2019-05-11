@@ -84,6 +84,10 @@ type RegisterDescription = Description "Register the user for a new account.\n\n
 
 type CheckCookieDescription = Description "Checks if a parseable cookie is present in the request.\n\nDoes not check if the cookie itself contains valid credentials.\n\nReturns 204 NoContent if cookie is present.\n\nReturns 401 Unauthorized if the cookie is not present."
 
+type ActivateDescription = Description "Activates a token using data from email"
+
+type DeactivateDescription = Description "Deactivates a token using data from email"
+
 -- MARK: Implementation
 
 type AuthenticationHandler =
@@ -102,11 +106,11 @@ type AuthenticationHandler =
         PostNoContent '[JSON, PlainText, FormUrlEncoded] (Headers '[Header "Set-Cookie" String] NoContent) :<|>
     "checkCookie" :> CheckCookieDescription :>
         Header "cookie" String :> GetNoContent '[JSON, PlainText, FormUrlEncoded] NoContent :<|>
-    "activate"
+    "activate" :> ActivateDescription
         :> Header "cookie" String
         :> ReqBody '[JSON] TokenActivationData
         :> Post '[JSON] TokenActivationResult :<|>
-    "deactivate"
+    "deactivate" :> DeactivateDescription
         :> ReqBody '[JSON] TokenActivationData
         :> PostNoContent '[JSON] NoContent
 
