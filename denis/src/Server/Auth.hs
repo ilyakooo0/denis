@@ -51,7 +51,6 @@ import qualified Data.ByteString.Base64 as BS
 import Data.Maybe
 import Server.Auth.Token
 import Server.Auth.Mail
-import Data.Int
 import Web.UAParser
 import qualified Data.Text.Lazy as TL
 
@@ -63,7 +62,7 @@ instance ToSample AuthenticationCredits where
 instance ToSample UserLoginResponse where
     toSamples _ = samples $ map UserLoginResponse [UserIsRegistered, UserCanRegister, InvalidUser]
 
-instance ToSample Int32 where
+instance ToSample Int where
     toSamples _ = samples [382934, 103845, 294905]
 
 instance ToSample UserCreation where
@@ -90,7 +89,7 @@ type AuthenticationHandler =
         :> Header "cookie" String
         :> PostNoContent '[JSON, PlainText, FormUrlEncoded] (Headers '[Header "Set-Cookie" String] NoContent) :<|>
     "verify" :> VerifyDescription :>
-        Header "cookie" String :> ReqBody '[JSON] Int32 :> PostNoContent '[JSON, PlainText, FormUrlEncoded] NoContent :<|>
+        Header "cookie" String :> ReqBody '[JSON] Int :> PostNoContent '[JSON, PlainText, FormUrlEncoded] NoContent :<|>
     "register" :> RegisterDescription :>
         ReqBody '[JSON] UserCreation :>
         Header "User-Agent" String :>
@@ -141,21 +140,16 @@ logIn (AuthenticationCredits email') ua' = do
                 Nothing -> return . noHeader $ UserLoginResponse UserCanRegister
                 Just User{..} -> do
                     let ua = getUserAgent ua'
-                    token <- generateToken userId ua
+                    GeneratedToken token value code activation deactivation <- generateToken userId ua
                     runQerror . createToken $ token
-                    let cookie = generateCookie token
-                    case tokenVerificationCode token of
-                        Just code -> do
-                            sendTokenVerificationEmail code (TL.fromStrict ua) email
-                            return . addHeader cookie $ UserLoginResponse UserIsRegistered
-                        Nothing -> throwError err500
+                    let cookie = generateCookie token value
+                    sendTokenVerificationEmail code (TL.fromStrict ua) email
+                    return . addHeader cookie $ UserLoginResponse UserIsRegistered
 
-generateCookie :: Token -> String
-generateCookie token = L.unpack . toLazyByteString . renderSetCookie $ defaultSetCookie {
+generateCookie :: Token -> BS.ByteString -> String
+generateCookie token value = L.unpack . toLazyByteString . renderSetCookie $ defaultSetCookie {
     setCookieName = cookieTokenKey,
-    setCookieValue = L.toStrict . encode $ AuthenticationCookieData
-        (tokenUserId token)
-        (tokenValue token),
+    setCookieValue = L.toStrict . encode $ AuthenticationCookieData (tokenUserId token) value,
     setCookieExpires = Just (tokenExpiryDate token),
     setCookiePath = Just "/",
     setCookieHttpOnly = True,
@@ -171,7 +165,7 @@ checkCookie cookie = do
         Nothing -> throwError err401
         Just _ -> return NoContent
 
-verifyToken :: Maybe String -> Int32 -> App NoContent
+verifyToken :: Maybe String -> Int -> App NoContent
 verifyToken Nothing _ = throwError err400
 verifyToken (Just cookie) code = do
     let mbToken = getCookie cookie
@@ -208,17 +202,14 @@ register creation' ua' = do
     unless (validateUser creation) $ throwError err400
     genToken <- generateTokenM
     let ua = getUserAgent ua'
-    token <- runQ err409 . commitedTransactionallyUpdate $ do
+    GeneratedToken token value code activation deactivation <- runQ err409 . commitedTransactionallyUpdate $ do
         uId <- createUser creation
-        let token = genToken uId ua
-        createToken token
-        return token
-    case tokenVerificationCode token of
-        Just code -> do
-            sendTokenVerificationEmail code (TL.fromStrict ua) (userCreationUserEmail creation)
-            let cookie = generateCookie token
-            return $ addHeader cookie NoContent
-        Nothing -> throwError err500
+        let gToken = genToken uId ua
+        createToken . generatedToken $ gToken
+        return gToken
+    sendTokenVerificationEmail code (TL.fromStrict ua) (userCreationUserEmail creation)
+    let cookie = generateCookie token value
+    return $ addHeader cookie NoContent
 
 getUserAgent :: Maybe String -> T.Text
 getUserAgent uaData' = fromMaybe "Unknown" $ do

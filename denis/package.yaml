@@ -63,7 +63,7 @@ dependencies:
 - mime-mail
 - periodic
 - ua-parser
-
+- cryptohash-sha512
 
 
 library:
