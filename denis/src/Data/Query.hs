@@ -57,7 +57,8 @@ module Data.Query (
     tryActivateToken,
     deactivateToken,
     searchUsers,
-    searchTags
+    searchTags,
+    updateUser
     ) where
 
 import Squeal.PostgreSQL
@@ -285,6 +286,18 @@ getChannelForUserQ :: Query Schema (TuplePG (UserId, NamedChannelId)) (RowPG Nam
 getChannelForUserQ = selectStar $
     from (table #channels) &
     where_ (#namedChannelFullOwner .== param @1 .&& #namedChannelFullId .== param @2)
+
+updateUserQ :: Manipulation Schema (TuplePG (User FacultyUrl)) (RowPG (Only UserId))
+updateUserQ = update #users (
+    Same `as` #userRowId :*
+    Set (param @2) `as` #userRowFirstName :*
+    Set (param @3) `as` #userRowMiddleName :*
+    Set (param @4) `as` #userRowLastName :*
+    Set (param @5) `as` #userRowFacultyUrl :*
+    Same `as` #userRowEmail :*
+    Same `as` #userRowIsValidated)
+    (#userRowId .== param @1 .&& #userRowEmail .== param @6)
+    (Returning $ #userRowId `as` #fromOnly)
 
 getAllChannelsForUserQ :: Query Schema (TuplePG (Only UserId)) (RowPG NamedChannelFull)
 getAllChannelsForUserQ = selectStar $
@@ -1041,7 +1054,20 @@ deactivateToken uId dData = fmap fromOnly <$> (manipulateParams deactivateTokenQ
 getVerifiedToken :: UserId -> ByteString -> StaticPQ (Maybe Token)
 getVerifiedToken uId tokenData = runQueryParams getVerifiedTokenQ (uId, hash tokenData) >>= firstRow
 
+updateUser :: (User FacultyUrl) -> StaticPQ (Maybe UserId)
+updateUser user = fmap fromOnly <$> (manipulateParams updateUserQ (normalizeUser user) >>= firstRow)
+
 -- MARK: Utils
+
+normalizeUser :: User FacultyUrl -> User FacultyUrl
+normalizeUser User{..} = User {
+    userId = userId,
+    firstName = T.strip $ firstName,
+    middleName = T.strip $ middleName,
+    lastName = T.strip $ lastName,
+    userFaculty = T.toLower . T.strip $ userFaculty,
+    userEmail = T.toLower . T.strip $ userEmail
+}
 
 data UserRow = UserRow {
     userRowId :: UserId,
