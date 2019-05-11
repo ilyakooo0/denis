@@ -56,7 +56,8 @@ module Data.Query (
     createUser,
     tryActivateToken,
     deactivateToken,
-    searchUsers
+    searchUsers,
+    searchTags
     ) where
 
 import Squeal.PostgreSQL
@@ -353,7 +354,7 @@ getChannelPostsQ lim dir uIds tags = getLastPostsQ
             Just uIdsQ -> (`in_` uIdsQ)
             Nothing -> const $ false
 
-getTagsQ :: Query Schema '[] (RowPG (Only String))
+getTagsQ :: Query Schema params (RowPG (Only String))
 getTagsQ = selectDistinct (unsafeFunction "unnest" #postRowTags `as` #fromOnly) $
     from (table #posts)
 
@@ -554,6 +555,29 @@ searchUsersQ = select (
             #users ! #userRowLastName
             ])
         query = tsQuery' (param @1)
+
+tagsByFrquencyQ :: Query Schema params '["tag" ::: 'NotNull (PG Text), "count" ::: 'NotNull 'PGint8]
+tagsByFrquencyQ = select
+            (#fromOnly `as` #tag :* count #fromOnly `as` #count)
+            (from (subquery $ getTagsQ `As` #tt) &
+            groupBy #fromOnly)
+
+getNpopularTagsQ :: Limit -> Query Schema param (RowPG (Only Text))
+getNpopularTagsQ lim = select (#tag `as` #fromOnly)
+    (from (subquery $ tagsByFrquencyQ `As` #tt) &
+        orderBy [#count & Desc] &
+        limit lim)
+
+
+searchTagsQ :: Query Schema (TuplePG (Only Text)) (RowPG (Only Text))
+searchTagsQ = select (#tag `as` #fromOnly) $
+    from (subquery (tagsByFrquencyQ `As` #tt)) &
+    where_ (vector @@ query) &
+    orderBy [#count & Desc] &
+    limit 100
+    where
+        query = tsQuery' (param @1)
+        vector = tsVector' #tag
 
 tsRankCd
     :: Expression schema from grouping params ('NotNull 'PGtext)
@@ -876,8 +900,9 @@ deleteNamedChannel uId cId = commitedTransactionallyUpdate $ do
     _ <- manipulateParams deleteNamedChannelQ (Only cId)
     return ()
 
-getTags :: StaticPQ [String]
-getTags = map fromOnly <$> (runQuery getTagsQ >>= getRows)
+-- Returns n most popular
+getTags :: Limit -> StaticPQ [String]
+getTags lim = map fromOnly <$> (runQuery (getNpopularTagsQ lim) >>= getRows)
 
 getDialogs
     :: UserId
@@ -963,6 +988,11 @@ getFacultyFromQuery query =
 searchUsers :: T.Text -> StaticPQ [User Faculty]
 searchUsers query =
     map rowToUser <$> (runQueryParams searchUsersQ (Only . queryFromText $ query) >>= getRows)
+
+searchTags :: T.Text -> StaticPQ [Text]
+searchTags query = map fromOnly <$>
+    (runQueryParams searchTagsQ
+        (Only . (<> ":*") . T.strip $ query) >>= getRows)
 
 createToken :: Token -> StaticPQ ()
 createToken token = void $ manipulateParams createTokenQ token

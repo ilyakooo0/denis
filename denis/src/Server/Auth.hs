@@ -211,7 +211,7 @@ deactivateUser (Just uId) (Just dData') = catchErrorPage $ do
         Right dData -> do
             ua' <- runQerror $ deactivateToken uId dData
             case ua' of
-                Nothing -> return $ page "This activation link has been invalidated."
+                Nothing -> return $ page "This deactivation link has been invalidated."
                 Just ua -> return $ genActivationPage "out" ua
 
 catchErrorPage :: App Markup -> App Markup
