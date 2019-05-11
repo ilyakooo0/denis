@@ -77,6 +77,8 @@ type VerifyDescription = Description "Verify token with the verification code fr
 
 type RegisterDescription = Description "Register the user for a new account.\n\nReturns 409 if a user can not be created. (Most likely the email is already registered).\n\nSets the token if creation was successful.\n\nYou should prompt user for code and verify the token with `/verify`."
 
+type CheckCookieDescription = Description "Checks if a parseable cookie is present in the request.\n\nDoes not check if the cookie itself contains valid credentials.\n\nReturns 204 NoContent if cookie is present.\n\nReturns 401 Unauthorized if the cookie is not present."
+
 -- MARK: Implementation
 
 type AuthenticationHandler =
@@ -92,7 +94,9 @@ type AuthenticationHandler =
     "register" :> RegisterDescription :>
         ReqBody '[JSON] UserCreation :>
         Header "User-Agent" String :>
-        PostNoContent '[JSON, PlainText, FormUrlEncoded] (Headers '[Header "Set-Cookie" String] NoContent)
+        PostNoContent '[JSON, PlainText, FormUrlEncoded] (Headers '[Header "Set-Cookie" String] NoContent) :<|>
+    "checkCookie" :> CheckCookieDescription :>
+        Header "cookie" String :> GetNoContent '[JSON, PlainText, FormUrlEncoded] NoContent
 
 data UserResponseStatus = UserIsRegistered | UserCanRegister | InvalidUser
     deriving (Show)
@@ -124,7 +128,7 @@ newtype AuthenticationCredits = AuthenticationCredits {authenticationEmail :: Us
     deriving (GHC.Generic, ToJSON, FromJSON)
 
 authenticationAPI :: ServerT AuthenticationHandler App
-authenticationAPI = logIn :<|> logOut :<|> verifyToken :<|> register
+authenticationAPI = logIn :<|> logOut :<|> verifyToken :<|> register :<|> checkCookie
 
 logIn :: AuthenticationCredits -> Maybe String -> App (Headers '[Header "Set-Cookie" String] UserLoginResponse)
 logIn (AuthenticationCredits email') ua' = do
@@ -157,11 +161,20 @@ generateCookie token = L.unpack . toLazyByteString . renderSetCookie $ defaultSe
     setCookieHttpOnly = True,
     setCookieSecure = True }
 
+getCookie :: String -> Maybe AuthenticationCookieData
+getCookie = (>>= (decode . L.fromStrict)) . lookup cookieTokenKey . parseCookies . C.pack
+
+checkCookie :: Maybe String -> App NoContent
+checkCookie cookie = do
+    let token = cookie >>= getCookie
+    case token of
+        Nothing -> throwError err401
+        Just _ -> return NoContent
 
 verifyToken :: Maybe String -> Int32 -> App NoContent
 verifyToken Nothing _ = throwError err400
 verifyToken (Just cookie) code = do
-    let mbToken = (>>= (decode . L.fromStrict)) . lookup cookieTokenKey . parseCookies . C.pack $ cookie
+    let mbToken = getCookie cookie
     case mbToken of
         Nothing -> throwError err400
         (Just (AuthenticationCookieData uId tokenData)) -> do
@@ -171,10 +184,9 @@ verifyToken (Just cookie) code = do
                 Nothing -> throwError err403
 
 logOut :: Maybe String -> App (Headers '[Header "Set-Cookie" String] NoContent)
-logOut cookie' = do
+logOut cookie = do
     _ <- fromMaybe (return ()) $ do
-        cookie <- cookie'
-        AuthenticationCookieData uId tokenData <- (lookup cookieTokenKey . parseCookies . C.pack $ cookie) >>= (decode . L.fromStrict)
+        AuthenticationCookieData uId tokenData <- cookie >>= getCookie
         return . runQsilent $ invalidateToken uId tokenData
     let newCookie = defaultSetCookie {
         setCookieName = cookieTokenKey,
