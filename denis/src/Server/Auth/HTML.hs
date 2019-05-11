@@ -35,9 +35,12 @@ genActivationPage verb ua = genPage $ do
 
 
 genPage :: Markup -> Markup
-genPage pageContent = html $ body ! A.style "font-family: sans-serif; background-color: #eee" $ do
-    H.div ! A.style "text-align: center; margin-top: 20vh; margin-left: 10%; margin-right: 10%" $ do
-        H.div ! A.style "font-size: 40px; font-weight: bold;" $ pageContent
+genPage pageContent = html $ do
+    H.head $ do
+        meta ! name "viewport" ! content "width=device-width, initial-scale=1"
+    body ! A.style "font-family: sans-serif; background-color: #eee" $ do
+        H.div ! A.style "text-align: center; margin-top: 20vh; margin-left: 10%; margin-right: 10%" $ do
+            H.div ! A.style "font-size: 40px; font-weight: bold;" $ pageContent
 
 errorPage :: Markup
 errorPage = genPage $ "Sorry, something went wrong."
