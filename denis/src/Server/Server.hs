@@ -45,9 +45,9 @@ getConfig = do
     databaseURL <- getDBString
     conn <- createConnectionPool databaseURL 3 0.5 10
     crypto <- newCryptoRNGState
-    -- (Jusr selfRoot) <- lookupEnv "SELF_ROOT_URL"
+    selfRoot <- fromMaybe "http://localhost:2000" <$> lookupEnv "SELF_ROOT_URL"
     mail <- getMailConfig
-    return $ Config conn crypto mail
+    return $ Config conn crypto selfRoot mail
 
 runServer :: IO ()
 runServer = do

@@ -33,7 +33,7 @@ type DBConnection = Pool (K Connection Schema)
 data Config = Config {
     getPool :: !DBConnection,
     cryptoState :: !CryptoRNGState,
-    -- selfRootUrl :: !String,
+    selfRootUrl :: !String,
     mailConfig :: !MailConfig
 }
 

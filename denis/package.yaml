@@ -64,6 +64,8 @@ dependencies:
 - periodic
 - ua-parser
 - cryptohash-sha512
+- blaze-html
+- servant-blaze
 
 
 library:
