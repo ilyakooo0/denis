@@ -53,7 +53,9 @@ module Data.Query (
     tryVerifyToken,
     getVerifiedToken,
     UserCreation(..),
-    createUser
+    createUser,
+    tryActivateToken,
+    deactivateToken
     ) where
 
 import Squeal.PostgreSQL
@@ -83,7 +85,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Channel.NamedChannel
 import Data.Channel.AnonymousChannel
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isJust)
 import Squeal.PostgreSQL.Render
 import Data.GroupChat
 import Data.Message
@@ -624,6 +626,17 @@ getTokenQ = selectStar (from (table #tokens) &
     where_ (#tokenUserId .== param @1 .&&
         #tokenValue .== param @2))
 
+getTokenActivationQ :: Query Schema (TuplePG (UserId, ByteString)) (RowPG Token)
+getTokenActivationQ = selectStar (from (table #tokens) &
+    where_ (#tokenUserId .== param @1 .&&
+        #tokenActivationCode .== param @2))
+
+deactivateTokenQ :: Manipulation Schema (TuplePG (UserId, ByteString)) (RowPG (Only UserId))
+deactivateTokenQ = deleteFrom #tokens
+    (#tokenUserId .== param @1 .&&
+        #tokenDeactivationCode .== param @2)
+    (Returning (#tokenUserId `as` #fromOnly))
+
 getVerifiedTokenQ :: Query Schema (TuplePG (UserId, ByteString)) (RowPG Token)
 getVerifiedTokenQ = selectStar (from (table #tokens) &
     where_ (#tokenUserId .== param @1 .&&
@@ -932,6 +945,22 @@ tryVerifyToken uId tokenData code = commitedTransactionallyUpdate $ do
                             let newToken = token{tokenActivationTriesLeft = triesLeft}
                             _ <- manipulateParams updateTokenQ newToken
                             return Nothing
+
+tryActivateToken :: UserId -> ByteString -> StaticPQ (Maybe ByteString)
+tryActivateToken uId activationData = do
+    let hData = hash activationData
+    token' <- runQueryParams getTokenActivationQ (uId, hData) >>= firstRow
+    case token' of
+        Nothing -> return Nothing
+        Just token -> do
+            if (tokenActivationCode token == Just hData)
+                then commitedTransactionallyUpdate (validateToken token) >> return (Just $ tokenValue token)
+                else return Nothing
+
+deactivateToken :: UserId -> ByteString -> StaticPQ Bool
+deactivateToken uId dData = do
+    res <- manipulateParams deactivateTokenQ (uId, hash dData) >>= firstRow
+    return $ isJust (res :: Maybe (Only UserId))
 
 getVerifiedToken :: UserId -> ByteString -> StaticPQ (Maybe Token)
 getVerifiedToken uId tokenData = runQueryParams getVerifiedTokenQ (uId, hash tokenData) >>= firstRow

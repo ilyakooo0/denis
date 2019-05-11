@@ -43,7 +43,7 @@ import qualified GHC.Generics as GHC
 import Data.Aeson
 import qualified Data.Aeson as A
 import Data.Binary.Builder (toLazyByteString)
-import Servant.Docs (ToSample, samples, toSamples)
+import Servant.Docs (ToSample, samples, toSamples, singleSample)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Text.Regex
@@ -66,7 +66,13 @@ instance ToSample Int where
     toSamples _ = samples [382934, 103845, 294905]
 
 instance ToSample UserCreation where
-    toSamples _ = samples $ [UserCreation "Seva" "Algebrovich" "Leonidov" "cs.hse.ru/dse"  "vchernyshev@hse.ru"]
+    toSamples _ = samples $ [UserCreation "Seva" "Algebrovich" "Leonidov" "cs.hse.ru/dse/"  "vchernyshev@hse.ru"]
+
+instance ToSample TokenActivationData where
+    toSamples _ = singleSample $ TokenActivationData 69 "ABCDE"
+
+instance ToSample TokenActivationResult where
+    toSamples _ = samples [TokenActivationResultYou, TokenActivationResultNotYou]
 
 type LoginDescription = Description "Try to log in with the given email\n\nResponse fields:\n\n- `registered` -- User is registered and the cookie has been set. You now need to get a verification code from the user and pass it to `/verify`.\n- `canRegister` -- the email is valid, but the user needs to register. Prompt him for information and pass it to `/register`.\n- `invalid` -- the email is invalid."
 
@@ -95,7 +101,14 @@ type AuthenticationHandler =
         Header "User-Agent" String :>
         PostNoContent '[JSON, PlainText, FormUrlEncoded] (Headers '[Header "Set-Cookie" String] NoContent) :<|>
     "checkCookie" :> CheckCookieDescription :>
-        Header "cookie" String :> GetNoContent '[JSON, PlainText, FormUrlEncoded] NoContent
+        Header "cookie" String :> GetNoContent '[JSON, PlainText, FormUrlEncoded] NoContent :<|>
+    "activate"
+        :> Header "cookie" String
+        :> ReqBody '[JSON] TokenActivationData
+        :> Post '[JSON] TokenActivationResult :<|>
+    "deactivate"
+        :> ReqBody '[JSON] TokenActivationData
+        :> PostNoContent '[JSON] NoContent
 
 data UserResponseStatus = UserIsRegistered | UserCanRegister | InvalidUser
     deriving (Show)
@@ -114,6 +127,27 @@ data AuthenticationCookieData = AuthenticationCookieData {
     cookieUserToken :: BS.ByteString
 } deriving (Show, GHC.Generic, ToJSON, FromJSON)
 
+data TokenActivationData = TokenActivationData {
+    tokenVerificationUserId :: UserId,
+    tokenVerificationData :: BS.ByteString
+} deriving (Show)
+
+instance ToJSON TokenActivationData where
+    toJSON (TokenActivationData uId vData) = object [
+        "id" .= uId,
+        "data" .= vData
+        ]
+
+instance FromJSON TokenActivationData where
+    parseJSON = withObject "token verification data" $ \ e ->
+        TokenActivationData <$> e .: "id" <*> e .: "data"
+
+data TokenActivationResult = TokenActivationResultYou | TokenActivationResultNotYou
+
+instance ToJSON TokenActivationResult where
+    toJSON TokenActivationResultYou = object ["you" .= True]
+    toJSON TokenActivationResultNotYou = object ["you" .= False]
+
 instance ToJSON BS.ByteString where
     toJSON = A.String . T.decodeUtf8 . BS.encode
 
@@ -127,7 +161,7 @@ newtype AuthenticationCredits = AuthenticationCredits {authenticationEmail :: Us
     deriving (GHC.Generic, ToJSON, FromJSON)
 
 authenticationAPI :: ServerT AuthenticationHandler App
-authenticationAPI = logIn :<|> logOut :<|> verifyToken :<|> register :<|> checkCookie
+authenticationAPI = logIn :<|> logOut :<|> verifyToken :<|> register :<|> checkCookie :<|> validateTokenApi :<|> deactivateTokenApi
 
 logIn :: AuthenticationCredits -> Maybe String -> App (Headers '[Header "Set-Cookie" String] UserLoginResponse)
 logIn (AuthenticationCredits email') ua' = do
@@ -188,6 +222,26 @@ logOut cookie = do
         setCookieExpires = Just (UTCTime (ModifiedJulianDay 0) 0),
         setCookiePath = Just "/" }
     return $ addHeader (L.unpack . toLazyByteString . renderSetCookie $ newCookie) NoContent
+
+validateTokenApi :: Maybe String -> TokenActivationData -> App TokenActivationResult
+validateTokenApi cookie' (TokenActivationData uId aData) = do
+    tokenData' <- runQerror $ tryActivateToken uId aData
+    case tokenData' of
+        Nothing -> throwError err401
+        Just tokenData -> do
+            case cookie' >>= getCookie of
+                Nothing -> return TokenActivationResultNotYou
+                Just (AuthenticationCookieData uId' cData) ->
+                    if hash cData == tokenData && uId' == uId
+                        then return TokenActivationResultYou
+                        else return TokenActivationResultNotYou
+
+deactivateTokenApi :: TokenActivationData -> App NoContent
+deactivateTokenApi (TokenActivationData uId dData) = do
+    res <- runQerror $ deactivateToken uId dData
+    if res
+        then return NoContent
+        else throwError err401
 
 checkToken :: DBConnection -> AuthenticationCookieData -> Handler UserId
 checkToken conn (AuthenticationCookieData uId tokenData) = do
