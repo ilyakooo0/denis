@@ -48,7 +48,10 @@ sendMailWithConfig (MailConfig host port user pass) =
 
 genMail :: String -> TokenVerificationCode -> UserId -> String -> String -> TL.Text -> Part
 genMail rootUrl userCode uId activation deactivation ua = htmlPart . renderHtml $ html $ body ! A.style "font-family: sans-serif;" $ do
-    H.div ! A.style "display: none; max-height: 0px; overflow: hidden;" $ toHtml ua <> ": " <> toHtml [a', b', c', d', e', f']
+    H.div ! A.style "display: none; max-height: 0px; overflow: hidden;" $ do
+        "Verification code: " <> toHtml ua
+        br
+        toHtml [a', b', ' ', c', d', ' ', e', f']
     H.div ! A.style "display: none; max-height: 0px; overflow: hidden;" $ "            "
     H.div ! A.style "text-align: center; margin-top: 55px;" $ do
         H.a ! href (stringValue $ rootUrl <> "/authentication/activateUser?id=" <> show uId <> "&data=" <> activation) ! A.style "font-size: 34px; font-weight: bold; display: inline-block; padding: 7px 13px 7px 13px; margin-bottom: 89px; text-decoration: underline; font-family: sans-serif; color: #555;" $ "Log in"
