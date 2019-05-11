@@ -225,13 +225,13 @@ getUserAgent uaData' = fromMaybe "Unknown" $ do
     uaData <- fmap C.pack uaData'
     let os = osrFamily <$> parseOS uaData
     let browser = uarFamily <$> parseUA uaData
-    foldl mappendMaybe Nothing $ [os, browser]
+    foldl (mappendMaybeThrough " — ") Nothing $ [os, browser]
     where
-        mappendMaybe :: (Semigroup a) => Maybe a -> Maybe a -> Maybe a
-        mappendMaybe Nothing (Just a) = Just a
-        mappendMaybe (Just a) Nothing = Just a
-        mappendMaybe (Just a) (Just b) = Just (a <> b)
-        mappendMaybe Nothing Nothing = Nothing
+        mappendMaybeThrough :: (Semigroup a) => a -> Maybe a -> Maybe a -> Maybe a
+        mappendMaybeThrough _ Nothing (Just a) = Just a
+        mappendMaybeThrough _ (Just a) Nothing = Just a
+        mappendMaybeThrough i (Just a) (Just b) = Just (a <> i <> b)
+        mappendMaybeThrough _ Nothing Nothing = Nothing
 
 normalizaUser :: UserCreation -> UserCreation
 normalizaUser (UserCreation fName mName lName faculty email) =
