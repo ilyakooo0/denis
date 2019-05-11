@@ -166,7 +166,7 @@ type Schema =
                 "tokenUserId" ::: 'NoDef :=> 'NotNull 'PGint8,
                 "tokenValue" ::: 'NoDef :=> 'NotNull 'PGbytea,
                 "tokenExpiryDate" ::: 'NoDef :=> 'NotNull 'PGtimestamptz,
-                "tokenVerificationCode" ::: 'NoDef :=> 'Null 'PGint4, -- null == verified
+                "tokenVerificationCode" ::: 'NoDef :=> 'Null 'PGbytea, -- null == verified
                 "tokenActivationTriesLeft" ::: 'NoDef :=> 'NotNull 'PGint4,
                 "tokenUserAgent" ::: 'NoDef :=> 'NotNull 'PGtext,
                 "tokenActivationCode" ::: 'NoDef :=> 'Null 'PGbytea,
@@ -293,7 +293,7 @@ createTables = createTable #faculties (
         notNullable int8 `as` #tokenUserId :*
         notNullable bytea `as` #tokenValue :*
         notNullable timestampWithTimeZone `as` #tokenExpiryDate :*
-        nullable int4 `as` #tokenVerificationCode :*
+        nullable bytea `as` #tokenVerificationCode :*
         notNullable int4 `as` #tokenActivationTriesLeft :*
         notNullable text `as` #tokenUserAgent :*
         nullable bytea `as` #tokenActivationCode :*

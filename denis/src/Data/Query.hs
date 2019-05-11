@@ -95,7 +95,6 @@ import Data.Foldable (fold)
 import Data.Char
 import qualified Data.Vector as V
 import Server.Auth.Token
-import Data.Int
 
 -- MARK: Documentation
 
@@ -911,19 +910,19 @@ createToken token = void $ manipulateParams createTokenQ token
 -- NOTE: Not transactional
 validateToken :: Token -> StaticPQ ()
 validateToken token = do
-    void $ manipulateParams updateTokenQ token{tokenVerificationCode = Nothing}
+    void $ manipulateParams updateTokenQ token{tokenVerificationCode = Nothing, tokenActivationCode = Nothing}
     void $ manipulateParams validateUserQ $ Only $ tokenUserId token
 
 invalidateToken :: UserId -> ByteString -> StaticPQ ()
 invalidateToken uId bs = void . manipulateParams deleteTokenQ $ (uId, bs)
 
-tryVerifyToken :: UserId -> ByteString -> Int32 -> StaticPQ (Maybe Token)
+tryVerifyToken :: UserId -> ByteString -> Int -> StaticPQ (Maybe Token)
 tryVerifyToken uId tokenData code = commitedTransactionallyUpdate $ do
-    token' <- runQueryParams getTokenQ (uId, tokenData) >>= firstRow
+    token' <- runQueryParams getTokenQ (uId, hash tokenData) >>= firstRow
     case token' of
         Nothing -> return Nothing
         Just token -> do
-            if (tokenVerificationCode token == Just code)
+            if (tokenVerificationCode token == Just (hashVerificationCode code))
                 then validateToken token >> (return $ Just token)
                 else do
                     let triesLeft = tokenActivationTriesLeft token - 1
@@ -935,7 +934,7 @@ tryVerifyToken uId tokenData code = commitedTransactionallyUpdate $ do
                             return Nothing
 
 getVerifiedToken :: UserId -> ByteString -> StaticPQ (Maybe Token)
-getVerifiedToken uId tokenData = runQueryParams getVerifiedTokenQ (uId, tokenData) >>= firstRow
+getVerifiedToken uId tokenData = runQueryParams getVerifiedTokenQ (uId, hash tokenData) >>= firstRow
 
 -- MARK: Utils
 
