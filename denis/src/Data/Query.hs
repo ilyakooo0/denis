@@ -55,7 +55,8 @@ module Data.Query (
     UserCreation(..),
     createUser,
     tryActivateToken,
-    deactivateToken
+    deactivateToken,
+    searchUsers
     ) where
 
 import Squeal.PostgreSQL
@@ -523,6 +524,37 @@ getFacultySearchResultQ = selectStar (from (table #faculties) &
             (arrayToText #facultyTags)])
         query = tsQuery "russian" (param @1)
 
+searchUsersQ :: Query Schema (TuplePG (Only Text)) (RowPG UserRow)
+searchUsersQ = select (
+            #users ! #userRowId :*
+            #users ! #userRowFirstName :*
+            #users ! #userRowMiddleName :*
+            #users ! #userRowLastName :*
+            #users ! #userRowFacultyUrl :*
+            #users ! #userRowEmail :*
+            #users ! #userRowIsValidated :*
+            #faculties ! #facultyName `as` #userRowFacultyName :*
+            #faculties ! #facultyUrl `as` #userRowFacultyURL :*
+            #faculties ! #facultyPath `as` #userRowFacultyPath :*
+            #faculties ! #facultyCampusName `as` #userRowFacultyCampusName :*
+            #faculties ! #facultyCampusCode `as` #userRowFacultyCampusCode :*
+            #faculties ! #facultyTags `as` #userRowFacultyTags :*
+            #faculties ! #facultyAddress `as` #userRowFacultyAddress
+        ) (from ((table #users) &
+            innerJoin (table #faculties)
+                (#users ! #userRowFacultyUrl .== #faculties ! #facultyUrl)) &
+                where_ (notNull $ #users ! #userRowIsValidated) &
+                where_ (vector @@ query) &
+                orderBy [tsRankCd vector query & Desc] &
+                limit 100)
+    where
+        vector = tsVector' (textArrayToText [
+            #users ! #userRowFirstName,
+            #users ! #userRowMiddleName,
+            #users ! #userRowLastName
+            ])
+        query = tsQuery' (param @1)
+
 tsRankCd
     :: Expression schema from grouping params ('NotNull 'PGtext)
     -> Expression schema from grouping params ('NotNull 'PGtext)
@@ -537,12 +569,24 @@ tsVector
 tsVector lang x = UnsafeExpression $
     "to_tsvector" <> parenthesized (commaSeparated  [singleQuotedUtf8 lang, renderExpression x])
 
+tsVector'
+    :: Expression schema from grouping params ('NotNull 'PGtext)
+    -> Expression schema from grouping params ('NotNull 'PGtext)
+tsVector' x = UnsafeExpression $
+    "to_tsvector" <> parenthesized (renderExpression x)
+
 tsQuery
     :: ByteString -- ^ Language
     -> Expression schema from grouping params ('NotNull 'PGtext)
     -> Expression schema from grouping params ('NotNull 'PGtext)
 tsQuery lang x = UnsafeExpression $
     "to_tsquery" <> parenthesized (commaSeparated  [singleQuotedUtf8 lang, renderExpression x])
+
+tsQuery'
+    :: Expression schema from grouping params ('NotNull 'PGtext)
+    -> Expression schema from grouping params ('NotNull 'PGtext)
+tsQuery' x = UnsafeExpression $
+    "to_tsquery" <> parenthesized (renderExpression x)
 
 arrayToText
     :: Expression schema from grouping params ('NotNull  ('PGvararray ('NotNull 'PGtext)))
@@ -914,7 +958,11 @@ getGroupChatForUser uId gId = do
 
 getFacultyFromQuery :: T.Text -> StaticPQ [Faculty]
 getFacultyFromQuery query =
-    runQueryParams getFacultySearchResultQ (Only . queryFromText $ query) >>= getRows
+    runQueryParams getFacultySearchResultQ (Only . queryFromTextAbbr $ query) >>= getRows
+
+searchUsers :: T.Text -> StaticPQ [User Faculty]
+searchUsers query =
+    map rowToUser <$> (runQueryParams searchUsersQ (Only . queryFromText $ query) >>= getRows)
 
 createToken :: Token -> StaticPQ ()
 createToken token = void $ manipulateParams createTokenQ token
@@ -1000,8 +1048,8 @@ rowToUser UserRow{..} = User {
         userEmail = userRowEmail
     }
 
-queryFromText :: Text -> Text
-queryFromText = T.unwords . L.intersperse "&" . map processTerm . filter (not . T.null) . T.split (not . isAlphaNum)
+queryFromTextAbbr :: Text -> Text
+queryFromTextAbbr = T.unwords . L.intersperse "&" . map processTerm . filter (not . T.null) . T.split (not . isAlphaNum)
     where
         processTerm :: Text -> Text
         processTerm t = "(" <> t <> ":*" <> (
@@ -1009,6 +1057,12 @@ queryFromText = T.unwords . L.intersperse "&" . map processTerm . filter (not . 
                 then (" | (" <>) . (<> ")") . T.unwords . L.intersperse "<->" . map (<> ":*") . map T.singleton . T.unpack $ t
                 else mempty
             ) <> ")"
+
+queryFromText :: Text -> Text
+queryFromText = T.unwords . L.intersperse "&" . map processTerm . filter (not . T.null) . T.split (not . isAlphaNum)
+    where
+        processTerm :: Text -> Text
+        processTerm t = t <> ":*"
 
 directionToOperator
     :: P.PaginationDirection
