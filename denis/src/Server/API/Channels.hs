@@ -23,8 +23,11 @@ import qualified Data.Post as P
 import Server.Query.Pagination
 import Data.Int
 import Server.Error
+import Data.Text (Text)
 
 type CreateDescription = Description "Creates a new channel\n\nReturns 406 if the channel limit has been exceeded."
+
+type SearchDescription = Description "Search for user channels."
 
 -- MARK: Implementation
 
@@ -33,10 +36,11 @@ type ChannelsApi = Post '[JSON] [NamedChannel UserId] :<|>
     "getAnonymous" :> ReqBody '[JSON] (PaginatingRequest P.PostId (Maybe AnonymousChannel)) :> Post '[JSON] (ResponseWithUsers [P.Post]) :<|>
     "create" :> CreateDescription :> ReqBody '[JSON] NamedChannelCreationRequest :> Post '[JSON] NamedChannelId :<|>
     "update" :> ReqBody '[JSON] (NamedChannel UserId) :> PostNoContent '[JSON, FormUrlEncoded, PlainText] NoContent :<|>
-    "delete" :> ReqBody '[JSON] NamedChannelId :> PostNoContent '[JSON, FormUrlEncoded, PlainText] NoContent
+    "delete" :> ReqBody '[JSON] NamedChannelId :> PostNoContent '[JSON, FormUrlEncoded, PlainText] NoContent :<|>
+    "search" :> SearchDescription :> ReqBody '[JSON, PlainText] Text :> Post '[JSON] [NamedChannel UserId]
 
 channelsApi :: UserId -> ServerT ChannelsApi App
-channelsApi uId = getChannelsApi uId :<|> getChannel uId :<|> getAnonymousChannelsApi :<|> createChannelApi uId :<|> updateChannelApi uId :<|> deleteChannelApi uId
+channelsApi uId = getChannelsApi uId :<|> getChannel uId :<|> getAnonymousChannelsApi :<|> createChannelApi uId :<|> updateChannelApi uId :<|> deleteChannelApi uId :<|> searchChannelsApi uId
 
 
 getChannelsApi :: UserId -> App [NamedChannel UserId]
@@ -66,6 +70,9 @@ deleteChannelApi :: UserId -> NamedChannelId -> App NoContent
 deleteChannelApi uId cId = do
     runQnotFound $ deleteNamedChannel uId cId
     return NoContent
+
+searchChannelsApi :: UserId -> Text -> App [NamedChannel UserId]
+searchChannelsApi uId = runQerror . searchChannels uId
 
 -- TODO: Increase
 channelCountLimit :: Int64

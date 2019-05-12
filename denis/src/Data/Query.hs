@@ -62,7 +62,8 @@ module Data.Query (
     UserUpdateRow(..),
     killAllTokens,
     channelCountForUser,
-    pruneAuth
+    pruneAuth,
+    searchChannels
     ) where
 
 import Squeal.PostgreSQL
@@ -308,6 +309,23 @@ getAllChannelsForUserQ = selectStar $
     from (table #channels) &
     where_ (#namedChannelFullOwner .== param @1) &
     orderBy [#namedChannelFullId & Desc]
+
+searchChannelsForUserQ :: Query Schema (TuplePG (UserId, Text)) (RowPG NamedChannelFull)
+searchChannelsForUserQ = selectStar $
+    from (table #channels) &
+    where_ (#namedChannelFullOwner .== param @1 .&&
+        vector @@ query) &
+    orderBy [
+        tsRankCd vector1 query & Desc,
+        tsRankCd vector query & Desc
+    ]
+    where
+        vector = tsVector' (textArrayToText [
+            #namedChannelFullName,
+            unsafeFunction "unnest" #namedChannelFullTags
+            ])
+        vector1 = tsVector' #namedChannelFullName
+        query = tsQuery' (param @2)
 
 updateFacultyQ :: Manipulation Schema (TuplePG Faculty) '[]
 updateFacultyQ = insertRow #faculties
@@ -1070,6 +1088,10 @@ pruneAuth = do
     _ <- commitedTransactionallyUpdate . manipulate $ pruneDeadTokensQ
     _ <- commitedTransactionallyUpdate . manipulate $ pruneGhostUsersQ
     return ()
+
+searchChannels :: UserId -> Text -> StaticPQ [NamedChannel UserId]
+searchChannels uId query = fmap (map removeUserFromChannel) $
+    runQueryParams searchChannelsForUserQ (uId, queryFromText query) >>= getRows
 
 -- NOTE: Not transactional
 validateToken :: Token -> StaticPQ ()
