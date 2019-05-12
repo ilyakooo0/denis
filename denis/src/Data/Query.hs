@@ -722,7 +722,8 @@ getVerifiedTokenQ :: Query Schema (TuplePG (UserId, ByteString)) (RowPG Token)
 getVerifiedTokenQ = selectStar (from (table #tokens) &
     where_ (#tokenUserId .== param @1 .&&
         #tokenValue .== param @2 .&&
-        isNull #tokenVerificationCode))
+        isNull #tokenVerificationCode .&&
+        currentTimestamp .< #tokenExpiryDate))
 
 -- MARK: FrontEnd Data Structures
 
