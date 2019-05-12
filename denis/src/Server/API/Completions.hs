@@ -59,7 +59,7 @@ type CompletionsDescription = Description "\
     \}\n\
     \```"
 
-type SearchDescription = Description "Returns tag completions for given user input."
+type SearchDescription = Description "Returns top 1000 tag completions for given user input."
 
 type TagsAPI = "completions" :> CompletionsDescription :> Get '[JSON] CompletionTree :<|>
     "search" :> SearchDescription :> ReqBody '[JSON, PlainText] Text :> Post '[JSON] [Text]
