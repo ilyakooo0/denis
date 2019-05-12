@@ -21,6 +21,8 @@ import Data.Channel.NamedChannel
 import Data.Channel.AnonymousChannel
 import qualified Data.Post as P
 import Server.Query.Pagination
+import Data.Int
+import Server.Error
 
 -- MARK: Implementation
 
@@ -47,7 +49,11 @@ getChannel uId (PaginatingRequest pId lim (Just cId) dir) = runQnotFound $ getCh
 getChannel _ (PaginatingRequest pId lim Nothing dir) = maybeNotFound . runQnotFound $ getLastPosts pId lim dir
 
 createChannelApi :: UserId -> NamedChannelCreationRequest -> App NamedChannelId
-createChannelApi uId req = maybeNotFound . runQnotFound $ createNewChannel uId req
+createChannelApi uId req = do
+    cCount <- runQerror $ channelCountForUser uId
+    if cCount >= channelCountLimit
+        then throwError $ limitExceeded "You have exceeded the number of channels you can create."
+        else maybeNotFound . runQerror $ createNewChannel uId req
 
 updateChannelApi :: UserId -> NamedChannel UserId -> App NoContent
 updateChannelApi uId req = do
@@ -58,3 +64,7 @@ deleteChannelApi :: UserId -> NamedChannelId -> App NoContent
 deleteChannelApi uId cId = do
     runQnotFound $ deleteNamedChannel uId cId
     return NoContent
+
+-- TODO: Increase
+channelCountLimit :: Int64
+channelCountLimit = 5
