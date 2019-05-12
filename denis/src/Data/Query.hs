@@ -379,14 +379,25 @@ createMessageQ :: Manipulation
 createMessageQ = insertRow #messages
     (
         Default `as` #messageStorageId :*
-        Set (param @1) `as` #messageStorageAuthorId :*
+        Set (notNull $ param @1) `as` #messageStorageAuthorId :*
         Set (param @2) `as` #messageStorageDestinationGroupId :*
         Set (param @3) `as` #messageStorageDestinationUserId :*
-        Set (param @4) `as` #messageStorageBody :*
+        Set (notNull $ param @4) `as` #messageStorageBody :*
         Set currentTimestamp `as` #messageStorageTime
     )
     OnConflictDoRaise
     (Returning $ #messageStorageId `as` #fromOnly)
+
+createPhantomMessageQ :: Manipulation Schema (TuplePG (Only GroupChatId)) '[]
+createPhantomMessageQ = insertRow_ #messages
+    (
+        Default `as` #messageStorageId :*
+        Set null_ `as` #messageStorageAuthorId :*
+        Set (notNull $ param @1) `as` #messageStorageDestinationGroupId :*
+        Set null_ `as` #messageStorageDestinationUserId :*
+        Set null_ `as` #messageStorageBody :*
+        Set currentTimestamp `as` #messageStorageTime
+    )
 
 createGroupChatQ :: Manipulation Schema (TuplePG GroupChatCreation) (RowPG (Only GroupChatId))
 createGroupChatQ = insertRow #groupChats
@@ -463,7 +474,7 @@ getChatsQ lim dir = select (
                     (ifThenElse
                         (#messageStorageAuthorId .== param @1)
                         #messageStorageDestinationUserId
-                        (notNull #messageStorageAuthorId)) `as` #messageUserId) $
+                        #messageStorageAuthorId) `as` #messageUserId) $
                     from (table #messages) &
                     where_ (isNotNull #messageStorageDestinationUserId .&&
                         (#messageStorageAuthorId .== param @1 .||
@@ -974,12 +985,11 @@ sendMessage selfId (MessageCreation gId@Nothing (Just uId) body) = do
 sendMessage _ _ = lift $ S.throwError S.err400
 
 createGroupChat :: UserId -> GroupChatCreation -> StaticPQ GroupChatId
-createGroupChat uId (GroupChatCreation (Jsonb chatUsers) name) = do
+createGroupChat uId (GroupChatCreation (Jsonb chatUsers) name) = commitedTransactionallyUpdate $ do
     let chatUsers' = M.insert uId maxChatPermissions chatUsers
     (Only chatId) <- manipulateParams createGroupChatQ (GroupChatCreation (Jsonb chatUsers') name)
         >>= firstRow >>= fromMaybe500
-    -- TODO: Do somehting with this
-    _ <- sendMessage uId $ MessageCreation (Just chatId) Nothing (Jsonb $ Markdown "henlo")
+    _ <- manipulateParams createPhantomMessageQ (Only chatId)
     return chatId
 
 updateGroupChat :: UserId -> GroupChat -> StaticPQ ()

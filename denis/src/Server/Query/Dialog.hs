@@ -25,7 +25,7 @@ instance ToSample Dialog where
     toSamples _ = samples (take 1 (UserDialog <$> [69] <*> map snd (toSamples Proxy)) <>
         (GroupDialog <$> map snd (toSamples Proxy) <*> map snd (toSamples Proxy)))
 
-data Dialog = GroupDialog GroupChat Message | UserDialog UserId Message
+data Dialog = GroupDialog GroupChat (Maybe Message) | UserDialog UserId Message
     deriving Show
 
 instance ToJSON Dialog where
@@ -44,10 +44,10 @@ instance ToJSON Dialog where
 
 data ChatsResponse = ChatsResponse {
     chatResponseMessageId :: MessageId,
-    chatResponseMessageAuthorId :: UserId,
+    chatResponseMessageAuthorId :: Maybe UserId,
     chatResponseMessageDestinationGroupId :: Maybe GroupChatId,
     chatResponseMessageDestinationUserId :: Maybe UserId,
-    chatResponseMessageBody :: Jsonb (PostElement Message),
+    chatResponseMessageBody :: Maybe (Jsonb (PostElement Message)),
     chatResponseMessageTime :: UTCTime,
     chatResponseGroupUsers :: Maybe (Jsonb UserPermissions),
     chatResponseGroupName :: Maybe Text
@@ -60,13 +60,17 @@ responseToDialogs :: UserId -> [ChatsResponse] -> Maybe [Dialog]
 responseToDialogs selfId = sequence . map toDialog
     where
         toDialog :: ChatsResponse -> Maybe Dialog
-        toDialog (ChatsResponse mId uId Nothing (Just dId) (Jsonb mb) mt Nothing Nothing) =
+        toDialog (ChatsResponse mId (Just uId) Nothing (Just dId) (Just (Jsonb mb)) mt Nothing Nothing) =
             Just $ UserDialog
                 (if selfId == uId then dId else uId)
                 (Message mId uId (UserChatDestination dId) mb mt)
-        toDialog (ChatsResponse mId uId (Just gId) Nothing (Jsonb mb) mt (Just users) (Just name)) =
+        toDialog (ChatsResponse mId (Just uId) (Just gId) Nothing (Just (Jsonb mb)) mt (Just users) (Just name)) =
             Just $ GroupDialog
                 (GroupChat gId users name)
-                (Message mId uId (GroupChatDestination gId) mb mt)
+                (Just $ Message mId uId (GroupChatDestination gId) mb mt)
+        toDialog (ChatsResponse _ Nothing (Just gId) Nothing Nothing _ (Just users) (Just name)) =
+            Just $ GroupDialog
+                (GroupChat gId users name)
+                Nothing
         toDialog _ = Nothing
 
