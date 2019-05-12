@@ -27,12 +27,9 @@ dependencies:
 - text
 - aeson
 - bytestring
-# - http-client
-# - http-client-tls
 - servant-websockets
 - websockets
 - squeal-postgresql
-# - transformers-base
 - monad-control
 - generics-sop
 - containers
@@ -61,12 +58,11 @@ dependencies:
 - regex-compat
 - smtp-mail
 - mime-mail
-- periodic
 - ua-parser
 - cryptohash-sha512
 - blaze-html
 - servant-blaze
-
+- random
 
 library:
   source-dirs: src

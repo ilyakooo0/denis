@@ -1,1 +1,1 @@
-web: denis-exe
+web: denis-exe +RTS -N -T
