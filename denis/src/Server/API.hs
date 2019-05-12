@@ -58,7 +58,7 @@ type API =
             "users" :> ReqBody '[JSON] [UserId] :> Post '[JSON] [User Faculty] :<|>
             "users" :> "all" :> Post '[JSON] [User Faculty] :<|>
             "users" :> "search" :> UserSearchDescription :> ReqBody '[JSON, PlainText] Text :> Post '[JSON] [User Faculty] :<|>
-            "users" :> "update" :> UpdateUserDescription :> ReqBody '[JSON] UserCreation :> PostNoContent '[JSON, PlainText] NoContent :<|>
+            "users" :> "update" :> UpdateUserDescription :> ReqBody '[JSON] UserUpdate :> PostNoContent '[JSON, PlainText] NoContent :<|>
             "posts" :> PostApi :<|>
             "channels" :> ChannelsApi :<|>
             MessagesApi
@@ -85,15 +85,14 @@ mkServerAPI l =
         tagsServer :<|>
         facultyServer
 
-updateUserApi :: UserId -> UserCreation -> App NoContent
-updateUserApi uId UserCreation{..} = do
-    res <- runQerror $ updateUser User {
-            userId = uId,
-            firstName = userCreationFirstName,
-            middleName = userCreationMiddleName,
-            lastName = userCreationLastName,
-            userFaculty = userCreationUserFaculty,
-            userEmail = userCreationUserEmail
+updateUserApi :: UserId -> UserUpdate -> App NoContent
+updateUserApi uId UserUpdate{..} = do
+    res <- runQerror $ updateUser UserUpdateRow {
+            userUpdateRowId = uId,
+            userUpdateRowFirstName = userUpdateFirstName,
+            userUpdateRowMiddleName = userUpdateMiddleName,
+            userUpdateRowLastName = userUpdateLastName,
+            userUpdateRowUserFaculty = userUpdateUserFaculty
         }
     if isJust res
         then return NoContent
