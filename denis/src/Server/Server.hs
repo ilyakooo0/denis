@@ -55,7 +55,7 @@ runServer = do
     cfg <- getConfig
     void . forkIO $ updateFaculties cfg
     let ctx = genAuthServerContext $ getPool cfg
-    (middleLogger, logger) <- mkLogger 100
+    (middleLogger, logger) <- mkLogger 500
     let serverAPI = mkServerAPI logger
     let s = hoistServerWithContext serverProxy contextProxy (flip runReaderT cfg) serverAPI
     runSettings (settings port) $ cors (const $ Just policy) . middleLogger $ serveWithContext serverProxy ctx s
