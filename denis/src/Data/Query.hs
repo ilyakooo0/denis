@@ -60,7 +60,8 @@ module Data.Query (
     searchTags,
     updateUser,
     UserUpdateRow(..),
-    killAllTokens
+    killAllTokens,
+    channelCountForUser
     ) where
 
 import Squeal.PostgreSQL
@@ -336,6 +337,11 @@ createNamedChannelQ = insertRow #channels
     )
     OnConflictDoRaise
     (Returning $ #namedChannelFullId `as` #fromOnly)
+
+countChannelsQ :: Query Schema (TuplePG (Only UserId)) (RowPG (Only Int64))
+countChannelsQ = select (countStar `as` #fromOnly) (from (table #channels) &
+    where_ (#namedChannelFullOwner .== param @1) &
+    groupBy #namedChannelFullOwner)
 
 deleteNamedChannelQ :: Manipulation Schema (TuplePG (Only NamedChannelId)) '[]
 deleteNamedChannelQ = deleteFrom_ #channels (#namedChannelFullId .== param @1)
@@ -896,6 +902,9 @@ createNewChannel uId req = commitedTransactionallyUpdate $ do
     uIds <- verifiedUsers . toList $ namedChannelCreationRequestPeopleIds req
     cId <- manipulateParams createNamedChannelQ (addUserToChannelCreate uId (req {namedChannelCreationRequestPeopleIds = fromList uIds})) >>= firstRow
     return $ fmap fromOnly cId
+
+channelCountForUser :: UserId -> StaticPQ Int64
+channelCountForUser uId = (fromMaybe 0 . fmap fromOnly) <$> (runQueryParams countChannelsQ (Only uId) >>= firstRow)
 
 updateChannel :: UserId -> NamedChannel UserId -> StaticPQ ()
 updateChannel uId req = commitedTransactionallyUpdate $ do

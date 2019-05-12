@@ -63,7 +63,7 @@ generateTokenM = do
     activationToken <- randomBytes 64
     deactivationToken <- randomBytes 64
     code <- randomR (0, 999999)
-    expire <- liftIO $ fmap (addUTCTime (60*30 {- 30 minutes -} {- nominalDay * 365 -})) getCurrentTime -- one year
+    expire <- liftIO $ fmap (addUTCTime (nominalDay * 365)) getCurrentTime -- one year
     return $ \ uId ua -> GeneratedToken {
         generatedToken = Token uId (hash token) expire (Just . hashVerificationCode $ code) 10 ua (Just . hash $ activationToken) (hash deactivationToken),
         generatedTokenValue = token,
