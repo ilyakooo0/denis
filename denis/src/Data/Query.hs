@@ -58,7 +58,8 @@ module Data.Query (
     deactivateToken,
     searchUsers,
     searchTags,
-    updateUser
+    updateUser,
+    UserUpdateRow(..)
     ) where
 
 import Squeal.PostgreSQL
@@ -287,7 +288,7 @@ getChannelForUserQ = selectStar $
     from (table #channels) &
     where_ (#namedChannelFullOwner .== param @1 .&& #namedChannelFullId .== param @2)
 
-updateUserQ :: Manipulation Schema (TuplePG (User FacultyUrl)) (RowPG (Only UserId))
+updateUserQ :: Manipulation Schema (TuplePG (UserUpdateRow)) (RowPG (Only UserId))
 updateUserQ = update #users (
     Same `as` #userRowId :*
     Set (param @2) `as` #userRowFirstName :*
@@ -296,7 +297,7 @@ updateUserQ = update #users (
     Set (param @5) `as` #userRowFacultyUrl :*
     Same `as` #userRowEmail :*
     Same `as` #userRowIsValidated)
-    (#userRowId .== param @1 .&& #userRowEmail .== param @6)
+    (#userRowId .== param @1)
     (Returning $ #userRowId `as` #fromOnly)
 
 getAllChannelsForUserQ :: Query Schema (TuplePG (Only UserId)) (RowPG NamedChannelFull)
@@ -745,8 +746,17 @@ instance ToJSON UserCreation where
         ]
 
 instance FromJSON UserCreation where
-    parseJSON = withObject "named channel" $ \e ->
+    parseJSON = withObject "user creation" $ \e ->
         UserCreation <$> e .: "firstName" <*> e .: "middleName" <*> e .: "lastName" <*> e .: "faculty" <*> e .: "email"
+
+data UserUpdateRow = UserUpdateRow {
+    userUpdateRowId :: UserId,
+    userUpdateRowFirstName :: Text,
+    userUpdateRowMiddleName :: Text,
+    userUpdateRowLastName :: Text,
+    userUpdateRowUserFaculty :: FacultyUrl
+} deriving (GHC.Generic, SOP.Generic, SOP.HasDatatypeInfo)
+
 
 data NamedChannelCreation = NamedChannelCreation {
     namedChannelCreationOwner :: UserId,
@@ -1055,19 +1065,18 @@ deactivateToken uId dData = fmap fromOnly <$> (manipulateParams deactivateTokenQ
 getVerifiedToken :: UserId -> ByteString -> StaticPQ (Maybe Token)
 getVerifiedToken uId tokenData = runQueryParams getVerifiedTokenQ (uId, hash tokenData) >>= firstRow
 
-updateUser :: (User FacultyUrl) -> StaticPQ (Maybe UserId)
+updateUser :: (UserUpdateRow) -> StaticPQ (Maybe UserId)
 updateUser user = fmap fromOnly <$> (manipulateParams updateUserQ (normalizeUser user) >>= firstRow)
 
 -- MARK: Utils
 
-normalizeUser :: User FacultyUrl -> User FacultyUrl
-normalizeUser User{..} = User {
-    userId = userId,
-    firstName = T.strip $ firstName,
-    middleName = T.strip $ middleName,
-    lastName = T.strip $ lastName,
-    userFaculty = T.toLower . T.strip $ userFaculty,
-    userEmail = T.toLower . T.strip $ userEmail
+normalizeUser :: UserUpdateRow -> UserUpdateRow
+normalizeUser UserUpdateRow{..} = UserUpdateRow {
+    userUpdateRowId = userUpdateRowId,
+    userUpdateRowFirstName = T.strip $ userUpdateRowFirstName,
+    userUpdateRowMiddleName = T.strip $ userUpdateRowMiddleName,
+    userUpdateRowLastName = T.strip $ userUpdateRowLastName,
+    userUpdateRowUserFaculty = T.toLower . T.strip $ userUpdateRowUserFaculty
 }
 
 data UserRow = UserRow {
