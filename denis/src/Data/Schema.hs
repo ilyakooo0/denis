@@ -151,10 +151,10 @@ type Schema =
             ] :=>
             '[
                 "messageStorageId" ::: 'Def :=> 'NotNull 'PGint8,
-                "messageStorageAuthorId" ::: 'NoDef :=> 'NotNull 'PGint8,
+                "messageStorageAuthorId" ::: 'NoDef :=> 'Null 'PGint8,
                 "messageStorageDestinationGroupId" ::: 'NoDef :=> 'Null 'PGint8,
                 "messageStorageDestinationUserId" ::: 'NoDef :=> 'Null 'PGint8,
-                "messageStorageBody" ::: 'NoDef :=> 'NotNull (PG (Jsonb (PostElement Message))),
+                "messageStorageBody" ::: 'NoDef :=> 'Null (PG (Jsonb (PostElement Message))),
                 "messageStorageTime" ::: 'NoDef :=> 'NotNull 'PGtimestamptz
             ]),
         "tokens" ::: 'Table (
@@ -279,10 +279,10 @@ createTables = createTable #faculties (
             primaryKey #groupChatId `as` #pk_group_chats
     ) >>> createTable #messages (
         serial8 `as` #messageStorageId :*
-        notNullable int8 `as` #messageStorageAuthorId :*
+        nullable int8 `as` #messageStorageAuthorId :*
         nullable int8 `as` #messageStorageDestinationGroupId :*
         nullable int8 `as` #messageStorageDestinationUserId :*
-        notNullable jsonb `as` #messageStorageBody :*
+        nullable jsonb `as` #messageStorageBody :*
         notNullable timestampWithTimeZone `as` #messageStorageTime
         ) (
             primaryKey #messageStorageId `as` #pk_messages :*

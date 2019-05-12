@@ -81,10 +81,10 @@ instance FromJSON Message where
 
 data MessageStorage = MessageStorage {
     messageStorageId :: MessageId,
-    messageStorageAuthorId :: UserId,
+    messageStorageAuthorId :: Maybe UserId,
     messageStorageDestinationGroupId :: Maybe GroupChatId,
     messageStorageDestinationUserId :: Maybe UserId,
-    messageStorageBody :: Jsonb (PostElement Message),
+    messageStorageBody :: Maybe (Jsonb (PostElement Message)),
     messageStorageTime :: UTCTime
 } deriving GHC.Generic
 
@@ -97,17 +97,18 @@ infixl 4 <>>
 f <>> a = f <*> pure a
 
 restoreMessage :: MessageStorage -> Maybe Message
-restoreMessage (MessageStorage mId aId gId uId (Jsonb pb) mt) =
+restoreMessage (MessageStorage mId (Just aId) gId uId (Just (Jsonb pb)) mt) =
     Message mId aId <$> case (gId, uId) of
             (Just gId', Nothing) -> Just $ GroupChatDestination gId'
             (Nothing, Just uId') -> Just $ UserChatDestination uId'
             _ -> Nothing
         <>> pb <>> mt
+restoreMessage _ = Nothing
 
 storeMessage :: Message -> MessageStorage
 storeMessage (Message mId aId dId pb mt) = case dId of
-    GroupChatDestination gId -> MessageStorage mId aId (Just gId) Nothing (Jsonb pb) mt
-    UserChatDestination uId -> MessageStorage mId aId Nothing (Just uId) (Jsonb pb) mt
+    GroupChatDestination gId -> MessageStorage mId (Just aId) (Just gId) Nothing (Just (Jsonb pb)) mt
+    UserChatDestination uId -> MessageStorage mId (Just aId) Nothing (Just uId) (Just (Jsonb pb)) mt
 
 instance ToSample MessageCreation where
     toSamples _ = samples $ (MessageCreation Nothing (Just 69) <$>
