@@ -61,7 +61,8 @@ module Data.Query (
     updateUser,
     UserUpdateRow(..),
     killAllTokens,
-    channelCountForUser
+    channelCountForUser,
+    pruneAuth
     ) where
 
 import Squeal.PostgreSQL
@@ -756,6 +757,14 @@ killAllTokensQ :: Manipulation Schema (TuplePG (Only UserId)) '[]
 killAllTokensQ = deleteFrom_ #tokens
     (#tokenUserId .== param @1)
 
+pruneDeadTokensQ :: Manipulation Schema '[] '[]
+pruneDeadTokensQ = deleteFrom_ #tokens
+    (#tokenExpiryDate .< currentTimestamp)
+
+pruneGhostUsersQ :: Manipulation Schema '[] '[]
+pruneGhostUsersQ = deleteFrom_ #users
+    (not_ . in_ #userRowId $ select (#tokens ! #tokenUserId `as` #id) $ from $ table #tokens)
+
 -- MARK: FrontEnd Data Structures
 
 data UserCreation = UserCreation {
@@ -1055,6 +1064,12 @@ createToken token = void $ manipulateParams createTokenQ token
 
 killAllTokens :: UserId -> StaticPQ ()
 killAllTokens = void . manipulateParams killAllTokensQ . Only
+
+pruneAuth :: StaticPQ ()
+pruneAuth = do
+    _ <- commitedTransactionallyUpdate . manipulate $ pruneDeadTokensQ
+    _ <- commitedTransactionallyUpdate . manipulate $ pruneGhostUsersQ
+    return ()
 
 -- NOTE: Not transactional
 validateToken :: Token -> StaticPQ ()

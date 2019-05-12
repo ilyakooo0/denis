@@ -24,12 +24,14 @@ import Server.Query.Pagination
 import Data.Int
 import Server.Error
 
+type CreateDescription = Description "Creates a new channel\n\nReturns 406 if the channel limit has been exceeded."
+
 -- MARK: Implementation
 
 type ChannelsApi = Post '[JSON] [NamedChannel UserId] :<|>
     "get" :> ReqBody '[JSON] (PaginatingRequest P.PostId (Maybe NamedChannelId)) :> Post '[JSON] (ResponseWithUsers [P.Post]) :<|>
     "getAnonymous" :> ReqBody '[JSON] (PaginatingRequest P.PostId (Maybe AnonymousChannel)) :> Post '[JSON] (ResponseWithUsers [P.Post]) :<|>
-    "create" :> ReqBody '[JSON] NamedChannelCreationRequest :> Post '[JSON] NamedChannelId :<|>
+    "create" :> CreateDescription :> ReqBody '[JSON] NamedChannelCreationRequest :> Post '[JSON] NamedChannelId :<|>
     "update" :> ReqBody '[JSON] (NamedChannel UserId) :> PostNoContent '[JSON, FormUrlEncoded, PlainText] NoContent :<|>
     "delete" :> ReqBody '[JSON] NamedChannelId :> PostNoContent '[JSON, FormUrlEncoded, PlainText] NoContent
 

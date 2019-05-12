@@ -17,12 +17,12 @@ import Control.Monad.Reader
 import Network.Wai.Handler.Warp
 import Network.HTTP.Types.Method
 import Server.Logger
-import Control.Concurrent
 import Data.Faculty.Parser
 import Data.Connection
 import Data.Query
 import Crypto.RNG
 import Network.Wai.Middleware.Cors
+import Server.Periodic
 
 getDBString :: IO B.ByteString
 getDBString = do
@@ -53,7 +53,8 @@ runServer :: IO ()
 runServer = do
     port <- getServerPort
     cfg <- getConfig
-    void . forkIO $ updateFaculties cfg
+    _ <- periodically (1 * hours) $ updateFaculties cfg
+    _ <- periodically (20 * minutes) $ runDbTask cfg pruneAuth
     let ctx = genAuthServerContext $ getPool cfg
     (middleLogger, logger) <- mkLogger 500
     let serverAPI = mkServerAPI logger
@@ -78,4 +79,10 @@ settings port = setPort port . setServerName "Denis" $ defaultSettings
 updateFaculties :: Config -> IO ()
 updateFaculties cfg = do
     fs <- getFaculties
-    forM_ fs (runHandler . flip runReaderT cfg . runQerror . updateFaculty)
+    forM_ fs (runTask cfg . runQerror . updateFaculty)
+
+runTask :: Config -> App () -> IO ()
+runTask cfg = void . runHandler . flip runReaderT cfg
+
+runDbTask :: Config -> StaticPQ () -> IO ()
+runDbTask cfg = runTask cfg . runQsilent
