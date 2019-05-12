@@ -38,7 +38,7 @@ genPage :: Markup -> Markup
 genPage pageContent = html $ do
     H.head $ do
         meta ! name "viewport" ! content "width=device-width, initial-scale=1"
-    body ! A.style "font-family: sans-serif; background-color: #e8e8e8" $ do
+    body ! A.style "font-family: sans-serif; background-color: #f8f8f8" $ do
         H.div ! A.style "text-align: center; margin-top: 20vh; margin-left: 10%; margin-right: 10%" $ do
             H.div ! A.style "font-size: 40px; font-weight: bold;" $ pageContent
 

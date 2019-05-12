@@ -90,7 +90,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Channel.NamedChannel
 import Data.Channel.AnonymousChannel
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, catMaybes)
 import Squeal.PostgreSQL.Render
 import Data.GroupChat
 import Data.Message
@@ -975,7 +975,7 @@ getMessagesInGroupChat
 getMessagesInGroupChat selfId gId mId lim dir = do
     _ <- getGroupChatForUser selfId gId
     resp <- runQueryParams (getGroupMessagesQ lim dir) (gId, mId) >>= getRows
-    (return . sequence . map restoreMessage $ resp) >>= fromMaybe500
+    return . catMaybes . map restoreMessage $ resp
 
 sendMessage :: UserId -> MessageCreation -> StaticPQ MessageId
 sendMessage selfId (MessageCreation (Just gId) uId@Nothing body) = do
