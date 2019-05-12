@@ -542,13 +542,21 @@ getGroupChatForUserQ = selectStar $
 getFacultySearchResultQ :: Query Schema (TuplePG (Only Text)) (RowPG Faculty)
 getFacultySearchResultQ = selectStar (from (table #faculties) &
     where_ (vector @@ query) &
-    orderBy [tsRankCd vector query & Desc])
+    orderBy [
+        tsRankCd vector1 query & Desc,
+        tsRankCd vector2 query & Desc,
+        tsRankCd vector query & Desc
+    ])
     where
         vector = tsVector "russian" (textArrayToText [
             #facultyName,
             #facultyPath,
             #facultyCampusName,
             (arrayToText #facultyTags)])
+        vector1 = tsVector "russian" #facultyName
+        vector2 = tsVector "russian" (textArrayToText [
+            #facultyName,
+            #facultyPath])
         query = tsQuery "russian" (param @1)
 
 searchUsersQ :: Query Schema (TuplePG (Only Text)) (RowPG UserRow)
@@ -610,7 +618,7 @@ tsRankCd
     -> Expression schema from grouping params ('NotNull 'PGtext)
     -> Expression schema from grouping params ('NotNull 'PGfloat4)
 tsRankCd vector query = UnsafeExpression $
-    "ts_rank_cd" <> parenthesized (commaSeparated . map renderExpression $ [vector, query])
+    "ts_rank_cd" <> parenthesized (commaSeparated ["ARRAY[1,1,1,1]", renderExpression vector, renderExpression query, "2|4|8|16|32"])
 
 tsVector
     :: ByteString -- ^ Language
