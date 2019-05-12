@@ -59,7 +59,8 @@ module Data.Query (
     searchUsers,
     searchTags,
     updateUser,
-    UserUpdateRow(..)
+    UserUpdateRow(..),
+    killAllTokens
     ) where
 
 import Squeal.PostgreSQL
@@ -737,6 +738,10 @@ getVerifiedTokenQ = selectStar (from (table #tokens) &
         isNull #tokenVerificationCode .&&
         currentTimestamp .< #tokenExpiryDate))
 
+killAllTokensQ :: Manipulation Schema (TuplePG (Only UserId)) '[]
+killAllTokensQ = deleteFrom_ #tokens
+    (#tokenUserId .== param @1)
+
 -- MARK: FrontEnd Data Structures
 
 data UserCreation = UserCreation {
@@ -1031,6 +1036,8 @@ searchTags query = map fromOnly <$>
 createToken :: Token -> StaticPQ ()
 createToken token = void $ manipulateParams createTokenQ token
 
+killAllTokens :: UserId -> StaticPQ ()
+killAllTokens = void . manipulateParams killAllTokensQ . Only
 
 -- NOTE: Not transactional
 validateToken :: Token -> StaticPQ ()

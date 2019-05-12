@@ -46,6 +46,8 @@ type UserSearchDescription = Description "Searches for users with the given stri
 
 type UpdateUserDescription = Description "Updates the current user.\n\nThrow 401 if you try to change email or something like that."
 
+type DeactivateAllDescription = Description "Deactivates all tokens for the logged in user including the one used to authenticate this request."
+
 -- MARK: Implementation
 
 type Authentication = AuthProtect "basicAuth"
@@ -55,6 +57,8 @@ type API =
         "authentication" :> AuthenticationHandler :<|>
         Authentication :> ComplexQuery :> (
             "authentication" :> "me" :> Post '[JSON] UserId :<|>
+            "deactivateAll" :> DeactivateAllDescription
+                :> DeleteNoContent '[JSON, PlainText, FormUrlEncoded] NoContent :<|>
             "users" :> ReqBody '[JSON] [UserId] :> Post '[JSON] [User Faculty] :<|>
             "users" :> "all" :> Post '[JSON] [User Faculty] :<|>
             "users" :> "search" :> UserSearchDescription :> ReqBody '[JSON, PlainText] Text :> Post '[JSON] [User Faculty] :<|>
@@ -74,6 +78,7 @@ mkServerAPI l =
         l :<|>
         authenticationAPI :<|> (\uId ->
         return uId :<|>
+        deactivateApi uId :<|>
         maybeNotFound . runQnotFound . getUsers :<|>
         runQerror getAllUsers :<|>
         runQerror . searchUsers :<|>
@@ -97,3 +102,6 @@ updateUserApi uId UserUpdate{..} = do
     if isJust res
         then return NoContent
         else throwError err401
+
+deactivateApi :: UserId -> App NoContent
+deactivateApi uId = runQerror (killAllTokens uId) >> return NoContent
