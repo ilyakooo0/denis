@@ -2,7 +2,10 @@
 
 module Server.Error (
     invalidToken,
-    limitExceeded,
+    amountExceeded,
+    lengthExceeded,
+    formatError,
+    impossibleContent,
     throwError
 ) where
 
@@ -17,7 +20,35 @@ invalidToken = ServantErr {
     errHeaders = []
 }
 
-limitExceeded :: String -> ServantErr
-limitExceeded msg = err406 {
-    errReasonPhrase = msg
+amountExceeded :: ServantErr
+amountExceeded = ServantErr {
+    errHTTPCode = 470,
+    errReasonPhrase = "The amount of elements the user can have has been exceeded.",
+    errBody = "",
+    errHeaders = []
 }
+
+lengthExceeded :: ServantErr
+lengthExceeded = ServantErr {
+    errHTTPCode = 471,
+    errReasonPhrase = "The length of user content has been exceeded.",
+    errBody = "",
+    errHeaders = []
+}
+
+formatError :: ServantErr
+formatError = ServantErr {
+    errHTTPCode = 472,
+    errReasonPhrase = "The format of the supplied content is invalid.",
+    errBody = "",
+    errHeaders = []
+}
+
+impossibleContent :: ServantErr
+impossibleContent = ServantErr {
+    errHTTPCode = 473,
+    errReasonPhrase = "The content you have supplied is invalid and/or conflict with the rest of the existing content.",
+    errBody = "",
+    errHeaders = []
+}
+

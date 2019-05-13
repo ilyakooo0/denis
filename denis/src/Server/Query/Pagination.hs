@@ -13,7 +13,8 @@
 
 module Server.Query.Pagination (
     PaginatingRequest(..),
-    PaginationDirection(..)
+    PaginationDirection(..),
+    validatePaginationRequest
     ) where
 
 import GHC.Generics
@@ -31,6 +32,9 @@ data PaginatingRequest i r = PaginatingRequest {
     request :: r,
     direction :: PaginationDirection
 } deriving (Generic)
+
+validatePaginationRequest :: (PaginatingRequest i r) -> Bool
+validatePaginationRequest PaginatingRequest{limit=lim} = lim > 0 && lim < 100
 
 instance (ToJSON r, ToJSON i) => ToJSON (PaginatingRequest i r) where
 instance (FromJSON r, FromJSON i) => FromJSON (PaginatingRequest i r) where

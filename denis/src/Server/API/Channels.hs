@@ -4,7 +4,8 @@
     OverloadedLabels,
     OverloadedStrings ,
     TypeApplications ,
-    TypeOperators #-}
+    TypeOperators,
+    RecordWildCards #-}
 
 module Server.API.Channels (
     ChannelsApi,
@@ -21,9 +22,12 @@ import Data.Channel.NamedChannel
 import Data.Channel.AnonymousChannel
 import qualified Data.Post as P
 import Server.Query.Pagination
-import Data.Int
 import Server.Error
 import Data.Text (Text)
+import Data.Text.Validator
+import Control.Monad
+import Data.Limits
+import qualified Data.Text as T
 
 type CreateDescription = Description "Creates a new channel\n\nReturns 406 if the channel limit has been exceeded."
 
@@ -47,22 +51,32 @@ getChannelsApi :: UserId -> App [NamedChannel UserId]
 getChannelsApi uId = runQnotFound $ getAllChannels uId
 
 getAnonymousChannelsApi :: PaginatingRequest P.PostId (Maybe AnonymousChannel) -> App (ResponseWithUsers [P.Post])
-getAnonymousChannelsApi (PaginatingRequest pId lim (Just req) dir) = runQnotFound $ getAnonymousChannelPosts pId lim dir req
-getAnonymousChannelsApi (PaginatingRequest pId lim Nothing dir) = maybeNotFound . runQnotFound $ getLastPosts pId lim dir
+getAnonymousChannelsApi req'@(PaginatingRequest pId lim (Just req) dir) = do
+    unless (validateText req && validatePaginationRequest req') $ throwError lengthExceeded
+    runQnotFound $ getAnonymousChannelPosts pId lim dir req
+getAnonymousChannelsApi req@(PaginatingRequest pId lim Nothing dir) = do
+    unless (validatePaginationRequest req) $ throwError lengthExceeded
+    maybeNotFound . runQnotFound $ getLastPosts pId lim dir
 
 getChannel :: UserId -> PaginatingRequest P.PostId (Maybe NamedChannelId) -> App (ResponseWithUsers [P.Post])
-getChannel uId (PaginatingRequest pId lim (Just cId) dir) = runQnotFound $ getChannelPosts uId pId lim dir cId
-getChannel _ (PaginatingRequest pId lim Nothing dir) = maybeNotFound . runQnotFound $ getLastPosts pId lim dir
+getChannel uId req@(PaginatingRequest pId lim (Just cId) dir) = do
+    unless (validatePaginationRequest req) $ throwError lengthExceeded
+    runQnotFound $ getChannelPosts uId pId lim dir cId
+getChannel _ req@(PaginatingRequest pId lim Nothing dir) = do
+    unless (validatePaginationRequest req) $ throwError lengthExceeded
+    maybeNotFound . runQnotFound $ getLastPosts pId lim dir
 
 createChannelApi :: UserId -> NamedChannelCreationRequest -> App NamedChannelId
 createChannelApi uId req = do
     cCount <- runQerror $ channelCountForUser uId
+    unless (validateText req) $ throwError lengthExceeded
     if cCount >= channelCountLimit
-        then throwError $ limitExceeded "You have exceeded the number of channels you can create."
+        then throwError $ amountExceeded
         else maybeNotFound . runQerror $ createNewChannel uId req
 
 updateChannelApi :: UserId -> NamedChannel UserId -> App NoContent
-updateChannelApi uId req = do
+updateChannelApi uId req@NamedChannel{..} = do
+    unless (validateText req) $ throwError lengthExceeded
     runQnotFound $ updateChannel uId req
     return NoContent
 
@@ -72,8 +86,8 @@ deleteChannelApi uId cId = do
     return NoContent
 
 searchChannelsApi :: UserId -> Text -> App [NamedChannel UserId]
-searchChannelsApi uId = runQerror . searchChannels uId
-
--- TODO: Increase
-channelCountLimit :: Int64
-channelCountLimit = 5
+searchChannelsApi uId query = do
+    unless (validateText query) $ throwError lengthExceeded
+    if (T.null . T.strip) query
+        then return []
+        else runQerror . searchChannels uId $ query

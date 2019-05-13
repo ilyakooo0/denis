@@ -18,7 +18,11 @@ import Server.App
 import Data.Connection
 import Data.Query
 import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Faculty
+import Data.Text.Validator
+import Control.Monad
+import Server.Error
 
 type SearchDescription = Description "Returns faculties for given string"
 
@@ -29,4 +33,9 @@ facultyServer :: ServerT FacultyAPI App
 facultyServer = search
 
 search :: Text -> App [Faculty]
-search = runQerror . getFacultyFromQuery
+search query = do
+    if T.null . T.strip $ query
+        then return []
+    else do
+        unless (validateText query) $ throwError lengthExceeded
+        runQerror . getFacultyFromQuery $ query

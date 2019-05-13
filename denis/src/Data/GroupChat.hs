@@ -7,7 +7,8 @@
     TypeOperators,
     OverloadedStrings,
     TypeSynonymInstances,
-    FlexibleInstances #-}
+    FlexibleInstances,
+    RecordWildCards #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 
@@ -32,6 +33,8 @@ import Squeal.PostgreSQL.Schema
 import Data.Function
 import Data.Proxy
 import Servant.Docs
+import Data.Limits
+import Data.Text.Validator
 
 instance ToSample GroupChat where
     toSamples _ = samples $ GroupChat <$>
@@ -43,6 +46,12 @@ instance ToSample GroupChatCreation where
     toSamples _ = samples $ GroupChatCreation <$>
         (Jsonb <$> map snd (toSamples Proxy)) <*>
         ["cocos", "kursach"]
+
+instance HasValidatableText GroupChat where
+    validateText GroupChat{..} = validateText $ groupChatName ~< maxGroupChatName
+
+instance HasValidatableText GroupChatCreation where
+    validateText GroupChatCreation{..} = validateText $ groupChatCreationName ~< maxGroupChatName
 
 instance ToSample UserPermissions where
     toSamples _ = singleSample $ M.fromList [(69, GroupChatPermissions True), (5051, GroupChatPermissions False)]

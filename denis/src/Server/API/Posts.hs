@@ -19,6 +19,10 @@ import Data.Query
 import Data.User
 import Data.Connection
 import Server.Query.Pagination
+import Data.Limits
+import Server.Error
+import Control.Monad
+import Data.Text.Validator
 
 -- MARK: Implementation
 
@@ -31,13 +35,21 @@ postApi :: UserId -> ServerT PostApi App
 postApi uId = getPostsApi :<|> lastPosts :<|> getPostsForUserApi :<|> publishPostApi uId
 
 getPostsApi :: [P.PostId] -> App (ResponseWithUsers [P.Post])
-getPostsApi = maybeNotFound . runQnotFound . getPosts
+getPostsApi req = do
+    unless (listLimit < length req) $ throwError lengthExceeded
+    maybeNotFound . runQnotFound . getPosts $ req
 
 lastPosts :: PaginatingRequest P.PostId (Maybe ()) -> App (ResponseWithUsers [P.Post])
-lastPosts (PaginatingRequest pId lim _ dir) = maybeNotFound . runQnotFound $ getLastPosts pId lim dir
+lastPosts req@(PaginatingRequest pId lim _ dir) = do
+    unless (validatePaginationRequest req) $ throwError lengthExceeded
+    maybeNotFound . runQnotFound $ getLastPosts pId lim dir
 
 getPostsForUserApi :: PaginatingRequest P.PostId UserId -> App (ResponseWithUsers [P.Post])
-getPostsForUserApi (PaginatingRequest pId lim uId dir) = maybeNotFound . runQnotFound $ getPostsForUser pId lim dir uId
+getPostsForUserApi req@(PaginatingRequest pId lim uId dir) = do
+    unless (validatePaginationRequest req) $ throwError lengthExceeded
+    maybeNotFound . runQnotFound $ getPostsForUser pId lim dir uId
 
 publishPostApi :: UserId -> P.PostCreation -> App P.PostId
-publishPostApi uId = runQerror . publishPost uId
+publishPostApi uId creation = do
+    unless (validateText creation) $ throwError lengthExceeded
+    runQerror . publishPost uId $ creation

@@ -35,6 +35,8 @@ import Server.API.Faculty
 import Data.Text (Text)
 import Data.Maybe (isJust)
 import Control.Monad.Except
+import Server.Error
+import Data.Text.Validator
 
 -- MARK: Documentation
 
@@ -92,7 +94,10 @@ mkServerAPI l =
 
 updateUserApi :: UserId -> UserUpdate -> App NoContent
 updateUserApi uId UserUpdate{..} = do
-    res <- runQerror $ updateUser UserUpdateRow {
+    unless (validateText $ userUpdateUserFaculty ~< 100) $ throwError lengthExceeded
+    facultyIsValid <- runQerror $ isValidFaculty userUpdateUserFaculty
+    unless (facultyIsValid) $ throwError impossibleContent
+    res <- runQ impossibleContent $ updateUser UserUpdateRow {
             userUpdateRowId = uId,
             userUpdateRowFirstName = userUpdateFirstName,
             userUpdateRowMiddleName = userUpdateMiddleName,
