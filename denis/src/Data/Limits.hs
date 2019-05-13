@@ -14,7 +14,7 @@ maxMessageLimitName :: Int
 maxMessageLimitName = 60
 
 postElementLengthLimit :: Int
-postElementLengthLimit = 10000
+postElementLengthLimit = 35000
 
 userFieldLengthLimit :: Int
 userFieldLengthLimit = 50
@@ -27,3 +27,6 @@ channelCountLimit = 128
 
 listLimit :: Int
 listLimit = 100
+
+globalTextLimit :: Int
+globalTextLimit = 50000

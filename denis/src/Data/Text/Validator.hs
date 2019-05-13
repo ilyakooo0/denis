@@ -12,8 +12,11 @@ module Data.Text.Validator (
 
 import qualified Data.Text as T
 import Data.Char
+import Data.Limits
 
 isValidChar :: Char -> Bool
+isValidChar '\n' = True
+isValidChar '\r' = True
 isValidChar = isPrint
 
 class HasValidatableText t where
@@ -28,16 +31,6 @@ infixl 5 ~=
 instance (HasValidatableText t) => HasValidatableText (ExtraPredicate t) where
     validateText (t `ExtraPredicate` p) = validateText t && p t
 
-
-
--- instance (Traversable f) => HasValidatableText (RangeableText (ExtraPredicate (f String))) where
---     validateText ((t `ExtraPredicate` p) `RangeableText` lims) = p t && validateText (t `RangeableText` lims)
-
--- instance HasValidatableText (RangeableText (ExtraPredicate (f T.Text))) where
---     validateText ((t `ExtraPredicate` p) `RangeableText` lims) = p t && validateText (t `RangeableText` lims)
-
--- instance (Foldable f) => HasValidatableText (RangeableText (ExtraPredicate (f T.Text))) where
---     validateText ((t `ExtraPredicate` p) `RangeableText` lims) = p t && validateText (t `RangeableText` lims)
 
 infixl 5 ~<
 (~<) :: t -> Int -> RangeableText t
@@ -59,16 +52,8 @@ instance HasValidatableText (RangeableText T.Text) where
         where
             len = T.length t
 
--- instance HasValidatableText (RangeableText T.Text) where
---     validateText (t `RangeableText` (lower, upper)) = len >= lower && len <= upper
---         where
---             len = T.length t
-
--- instance (Traversable t, HasValidatableText v) => HasValidatableText (t v) where
---     validateText = all validateText
-
 instance HasValidatableText T.Text where
-    validateText t = T.all isValidChar t && (not . T.null) t
+    validateText t = T.all isValidChar t && (not . T.null) t && T.length t < globalTextLimit
 
 instance HasValidatableText String where
-    validateText t = all isValidChar t && length t > 0
+    validateText t = all isValidChar t && length t > 0 && length t < globalTextLimit
