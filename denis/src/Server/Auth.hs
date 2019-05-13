@@ -386,7 +386,9 @@ validateEmail :: T.Text -> Bool
 validateEmail "ilyakooo0@gmail.com" = True
 validateEmail "rednikina.com@yandex.ru" = True
 validateEmail "admikhaleva@edu.hse.ru" = True
-validateEmail e = (all validChar email) && ((isJust . matchRegex regex $ email) || (isJust . matchRegex falseRegex $ email))
+validateEmail e = if all validChar email
+    then ((isJust . matchRegex regex $ email) || (isJust . matchRegex falseRegex $ email))
+    else False
     where
         email = T.unpack $ e
         regex = mkRegexWithOpts
@@ -399,7 +401,7 @@ validateEmail e = (all validChar email) && ((isJust . matchRegex regex $ email) 
             False
 
 validChar :: Char -> Bool
-validChar = isPrint
+validChar c = isAscii c && isPrint c
 
 -- checkString :: String -> App String
 -- checkString s =

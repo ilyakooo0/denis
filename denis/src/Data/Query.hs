@@ -1099,7 +1099,7 @@ getFacultyFromQuery query =
 searchUsers :: T.Text -> StaticPQ [User Faculty]
 searchUsers query = do
     unless (validateText query) $ lift $ throwError lengthExceeded
-    if (T.null . T.strip $ query)
+    if (T.null . T.filter isAlpha $  query)
         then return []
         else map rowToUser <$> (runQueryParams searchUsersQ (Only . queryFromText $ query) >>= getRows)
 
@@ -1228,7 +1228,7 @@ queryFromTextAbbr = T.unwords . L.intersperse "&" . map processTerm . filter (no
             ) <> ")"
 
 queryFromText :: Text -> Text
-queryFromText = T.unwords . L.intersperse "&" . map processTerm . filter (not . T.null) . T.split (not . isAlphaNum)
+queryFromText = T.unwords . L.intersperse "&" . map processTerm . filter (not . T.null) . T.split (not . isPrint)
     where
         processTerm :: Text -> Text
         processTerm t = t <> ":*"
