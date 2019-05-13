@@ -781,7 +781,8 @@ pruneDeadTokensQ = deleteFrom_ #tokens
 
 pruneGhostUsersQ :: Manipulation Schema '[] '[]
 pruneGhostUsersQ = deleteFrom_ #users
-    (not_ . in_ #userRowId $ select (#tokens ! #tokenUserId `as` #id) $ from $ table #tokens)
+    ((not_ . in_ #userRowId $ select (#tokens ! #tokenUserId `as` #id) (from $ table #tokens)) .&&
+        (not_ . notNull $ #userRowIsValidated))
 
 -- MARK: FrontEnd Data Structures
 
