@@ -21,6 +21,9 @@ import Server.Query.Pagination
 import Data.Message
 import Data.GroupChat
 import Server.Query.Dialog
+import Data.Text.Validator
+import Control.Monad
+import Server.Error
 
 type GetAllChatsDescription = Description "Gets chats starting from/ending with the given message id."
 type GetGroupChatDescription = Description "Gets information about a given group chat."
@@ -58,27 +61,45 @@ messagesServer uId =
 
 
 getChats :: UserId -> PaginatingRequest MessageId (Maybe ()) -> App (ResponseWithUsers [Dialog])
-getChats uId (PaginatingRequest mId lim _ dir) = runQerror $ getDialogs uId mId lim dir
+getChats uId req@(PaginatingRequest mId lim _ dir) = do
+    unless (validatePaginationRequest req) $ throwError lengthExceeded
+    runQerror $ getDialogs uId mId lim dir
 
 getGroupChat :: UserId -> PaginatingRequest MessageId GroupChatId -> App [Message]
-getGroupChat uId (PaginatingRequest mId lim gId dir) =
+getGroupChat uId req@(PaginatingRequest mId lim gId dir) = do
+    unless (validatePaginationRequest req) $ throwError lengthExceeded
     runQerror $ getMessagesInGroupChat uId gId mId lim dir
 
 getUserChat :: UserId -> PaginatingRequest MessageId UserId -> App [Message]
-getUserChat uId (PaginatingRequest mId lim dId dir) =
+getUserChat uId req@(PaginatingRequest mId lim dId dir) = do
+    unless (validatePaginationRequest req) $ throwError lengthExceeded
     runQerror $ getMessagesInUserChat uId dId mId lim dir
 
 getGroupChatInfo :: UserId -> GroupChatId -> App GroupChat
-getGroupChatInfo uId gId = runQerror $ getGroupChatForUser uId gId
+getGroupChatInfo uId gId = do
+    groupIsValid <- runQerror $ groupChatIsValidForUser uId gId
+    unless (groupIsValid) $ throwError impossibleContent
+    runQerror $ getGroupChatForUser uId gId
 
 updateGroupChatApi :: UserId -> GroupChat -> App NoContent
-updateGroupChatApi uId group = runQerror (updateGroupChat uId group) >> return NoContent
+updateGroupChatApi uId group = do
+    unless (validateText group) $ throwError lengthExceeded
+    groupIsValid <- runQerror $ groupChatIsValidForUser uId (groupChatId group)
+    unless (groupIsValid) $ throwError impossibleContent
+    runQerror (updateGroupChat uId group) >> return NoContent
 
 sendMessageApi :: UserId -> MessageCreation -> App MessageId
-sendMessageApi uId mes = runQerror $ sendMessage uId mes
+sendMessageApi uId mes = do
+    unless (validateText mes) $ throwError lengthExceeded
+    runQerror $ sendMessage uId mes
 
 createGroupChatApi :: UserId -> GroupChatCreation -> App GroupChatId
-createGroupChatApi uId group = runQerror $ createGroupChat uId group
+createGroupChatApi uId group = do
+    unless (validateText group) $ throwError lengthExceeded
+    runQerror $ createGroupChat uId group
 
 leaveChatAPI :: UserId -> GroupChatId -> App NoContent
-leaveChatAPI uId gIg = runQerror (leaveGroupChat uId gIg) >> return NoContent
+leaveChatAPI uId gId = do
+    groupIsValid <- runQerror $ groupChatIsValidForUser uId gId
+    unless (groupIsValid) $ throwError impossibleContent
+    runQerror (leaveGroupChat uId gId) >> return NoContent

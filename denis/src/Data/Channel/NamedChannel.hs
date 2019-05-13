@@ -5,7 +5,8 @@ OverloadedLabels,
 OverloadedStrings ,
 TypeApplications ,
 TypeOperators,
-OverloadedStrings #-}
+OverloadedStrings,
+RecordWildCards #-}
 
 module Data.Channel.NamedChannel (
     NamedChannelId,
@@ -21,18 +22,26 @@ import Servant.Docs (ToSample, toSamples, samples)
 import Data.Proxy
 import Data.Text (Text)
 import qualified Data.Vector as V
-import Data.User    
+import Data.User
 import qualified Data.Set as Set
+import Data.Text.Validator
+import Data.Tags.Validation
+import Data.Limits
 
 -- MARK: Documentation
 
 instance (ToSample u) => ToSample (NamedChannel u) where
     toSamples _ = samples $ NamedChannel <$> [8] <*> ["социология", "ФКН"] <*> [V.fromList ["thisIsHashTag", "thisIsAlsoHashTag"]] <*> [V.fromList (map snd $ toSamples Proxy)]
 
-
 instance ToSample NamedChannelCreationRequest where
     toSamples _ = samples $ NamedChannelCreationRequest <$> ["социология", "ФКН"] <*> [V.fromList ["thisIsHashTag", "thisIsAlsoHashTag"]] <*> [V.fromList [2, 7, 8]]
-    
+
+instance HasValidatableText (NamedChannel u) where
+    validateText NamedChannel{..} = validateText (namedChannelName ~< maxChannelName) && all (validateText . (~= validateTag')) namedChannelTags
+
+instance HasValidatableText (NamedChannelCreationRequest) where
+    validateText NamedChannelCreationRequest{..} = validateText (namedChannelCreationRequestName ~< maxChannelName) && all validateText namedChannelCreationRequestTags
+
 -- MARK: Implementation
 
 type NamedChannelId = Int64
@@ -53,14 +62,14 @@ instance (ToJSON u) => ToJSON (NamedChannel u) where
         "people" .= cPeople ]
 
 instance (FromJSON u, Ord u) => FromJSON (NamedChannel u) where
-    parseJSON = withObject "named channel" $ \e -> 
+    parseJSON = withObject "named channel" $ \e ->
         NamedChannel <$> e .: "id" <*> e .: "name" <*> fmap removeDuplicates (e .: "tags") <*> fmap removeDuplicates (e .: "people")
-        where 
+        where
             removeDuplicates :: Ord a => [a] -> V.Vector a
             removeDuplicates = V.fromList . Set.toList . Set.fromList
-        
+
 -- MARK: NamedChannelCreationRequest
-        
+
 data NamedChannelCreationRequest = NamedChannelCreationRequest {
     namedChannelCreationRequestName :: Text,
     namedChannelCreationRequestTags :: V.Vector Text,
@@ -75,10 +84,10 @@ instance ToJSON NamedChannelCreationRequest where
         "name" .= cName,
         "tags" .= cTags,
         "people" .= cPeople ]
-        
+
 instance FromJSON NamedChannelCreationRequest where
-    parseJSON = withObject "named channel" $ \e -> 
+    parseJSON = withObject "named channel" $ \e ->
         NamedChannelCreationRequest <$> e .: "name" <*> fmap removeDuplicates (e .: "tags") <*> fmap removeDuplicates (e .: "people")
-        where 
+        where
             removeDuplicates :: Ord a => [a] -> V.Vector a
             removeDuplicates = V.fromList . Set.toList . Set.fromList

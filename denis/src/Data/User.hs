@@ -6,7 +6,8 @@
     TypeApplications ,
     TypeOperators,
     OverloadedStrings,
-    DeriveAnyClass #-}
+    DeriveAnyClass,
+    RecordWildCards #-}
 
 module Data.User (
     User(..),
@@ -23,6 +24,8 @@ import Data.Aeson
 import Servant.Docs (ToSample, toSamples, samples)
 import Data.Proxy
 import Data.Faculty
+import Data.Limits
+import Data.Text.Validator
 
 -- MARK: Documentation
 
@@ -31,6 +34,9 @@ instance (ToSample f) => ToSample (User f) where
 
 instance ToSample (UserUpdate) where
     toSamples _ = samples $ [UserUpdate "Vasya" "Pupkinovuch" "Pupkin", UserUpdate "Seva" "Algebrovich" "Leonidov"] <*> ["cs.hse.ru/dse/"]
+
+instance HasValidatableText UserUpdate where
+    validateText UserUpdate{..} = all (validateText . (~< userFieldLengthLimit)) [userUpdateFirstName, userUpdateMiddleName, userUpdateLastName, userUpdateUserFaculty]
 
 -- MARK: Implementation
 

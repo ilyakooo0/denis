@@ -15,7 +15,8 @@ module Server.App (
     ask,
     asks,
     liftIO,
-    MailConfig(..)
+    MailConfig(..),
+    fromMaybeThrow
 ) where
 
 import Servant.Server
@@ -25,6 +26,7 @@ import Data.Schema
 import Generics.SOP (K)
 import Squeal.PostgreSQL.PQ (Connection)
 import Crypto.RNG
+import Server.Error
 
 type App = ReaderT Config Handler
 
@@ -46,3 +48,10 @@ data MailConfig = MailConfig {
 
 instance CryptoRNG App where
     randomBytes n = join $ asks (liftIO . randomBytesIO n . cryptoState)
+
+fromMaybeThrow :: ServantErr -> App (Maybe a) -> App a
+fromMaybeThrow err mb = do
+    a <- mb
+    case a of
+        Just b -> return b
+        Nothing -> throwError err

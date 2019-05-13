@@ -6,7 +6,8 @@
     TypeApplications ,
     TypeOperators,
     OverloadedStrings,
-    TupleSections #-}
+    TupleSections,
+    RecordWildCards #-}
 {-# OPTIONS_GHC -fno-warn-unused-top-binds #-}
 
 
@@ -33,6 +34,7 @@ import Control.Applicative
 import Data.Aeson.Types
 import Data.Proxy
 import Servant.Docs
+import Data.Text.Validator
 
 instance ToSample Message where
     toSamples _ = samples $ Message 8 69 <$>
@@ -42,6 +44,12 @@ instance ToSample Message where
 
 instance ToSample MessageDetination where
     toSamples _ = samples $ [GroupChatDestination 5, UserChatDestination 69]
+
+instance HasValidatableText Message where
+    validateText Message{..} = validateText messageBody
+
+instance HasValidatableText MessageCreation where
+    validateText (MessageCreation _ _ (Jsonb mb)) = validateText mb
 
 type GroupChatMessageId = Int64
 

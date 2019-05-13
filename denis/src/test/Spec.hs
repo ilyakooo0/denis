@@ -23,6 +23,7 @@ import Orphans
 import qualified Network.HTTP.Client as HTTP
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as LB
+import Network.HTTP.Types.Status (statusCode)
 
 main :: IO ()
 main = hspec goodAPISpec
@@ -43,8 +44,11 @@ goodAPISpec = describe "my server" $ do
 printPredicate = RequestPredicate $ \ req mgr -> do
     let url = HTTP.path req
     let (HTTP.RequestBodyLBS bs) = HTTP.requestBody req
+    resp <- HTTP.httpLbs req mgr
+    let code = statusCode $ HTTP.responseStatus resp
     putStrLn . ("\t\t" <>) $ B.unpack url
-    putStrLn $ LB.unpack bs
+    putStrLn . filter (/= '\a') $ LB.unpack bs
+    print code
     putStrLn ""
     return []
 

@@ -29,6 +29,8 @@ import Data.Function (on)
 import Data.Time.Clock
 import Data.Time.Calendar
 import qualified Data.Vector as V
+import Data.Tags.Validation
+import Data.Text.Validator
 
 -- MARK: Documentation
 
@@ -39,6 +41,8 @@ instance ToSample Post where
 instance ToSample PostCreation where
     toSamples _ = samples $ PostCreation <$> (map snd $ toSamples Proxy) <*> [(V.fromList ["hse", "cs", "machineLearning"])]
 
+instance HasValidatableText PostCreation where
+     validateText (PostCreation body tags) = all validateText body && all (validateText . (~= validateTag')) tags
 
 -- MARK: Actual type
 

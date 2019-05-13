@@ -5,7 +5,8 @@
     OverloadedStrings ,
     TypeApplications ,
     TypeOperators,
-    OverloadedStrings #-}
+    OverloadedStrings,
+    RecordWildCards #-}
 
 module Data.Channel.AnonymousChannel (
     AnonymousChannelId,
@@ -19,15 +20,20 @@ import Data.Aeson
 import Servant.Docs (ToSample, toSamples, samples)
 import Data.Text (Text)
 import qualified Data.Vector as V
-import Data.User    
+import Data.User
 import qualified Data.Set as Set
-
+import Data.Tags.Validation
+import Data.Text.Validator
 
 -- MARK: Documentation
 
 instance ToSample AnonymousChannel where
     toSamples _ = samples $ AnonymousChannel <$> [V.fromList ["thisIsHashTag", "thisIsAlsoHashTag"]] <*> [[2, 7, 8]]
-    
+
+
+instance HasValidatableText AnonymousChannel where
+    validateText AnonymousChannel{..} = all (validateText . (~= validateTag')) anonymousChannelTags
+
 -- MARK: Implementation
 
 type AnonymousChannelId = Int64
@@ -46,10 +52,10 @@ instance ToJSON AnonymousChannel where
         "people" .= cPeople ]
 
 instance FromJSON AnonymousChannel where
-    parseJSON = withObject "anonymous channel" $ \e -> 
+    parseJSON = withObject "anonymous channel" $ \e ->
         AnonymousChannel <$> fmap (V.fromList . removeDuplicates) (e .: "tags") <*> fmap removeDuplicates (e .: "people")
-        where 
+        where
             removeDuplicates :: Ord a => [a] -> [a]
             removeDuplicates = Set.toList . Set.fromList
 
-        
+

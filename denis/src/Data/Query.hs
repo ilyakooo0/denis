@@ -9,7 +9,8 @@
     FlexibleInstances,
     KindSignatures,
     DeriveAnyClass,
-    RecordWildCards #-}
+    RecordWildCards,
+    ScopedTypeVariables #-}
 
 {-# OPTIONS_GHC -Wno-partial-type-signatures #-}
 
@@ -63,7 +64,9 @@ module Data.Query (
     killAllTokens,
     channelCountForUser,
     pruneAuth,
-    searchChannels
+    searchChannels,
+    isValidFaculty,
+    groupChatIsValidForUser
     ) where
 
 import Squeal.PostgreSQL
@@ -93,7 +96,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Channel.NamedChannel
 import Data.Channel.AnonymousChannel
-import Data.Maybe (fromMaybe, catMaybes)
+import Data.Maybe (fromMaybe, catMaybes, isJust)
 import Squeal.PostgreSQL.Render
 import Data.GroupChat
 import Data.Message
@@ -105,6 +108,8 @@ import Data.Foldable (fold)
 import Data.Char
 import qualified Data.Vector as V
 import Server.Auth.Token
+import Server.Error
+import Data.Text.Validator
 
 -- MARK: Documentation
 
@@ -313,8 +318,7 @@ getAllChannelsForUserQ = selectStar $
 searchChannelsForUserQ :: Query Schema (TuplePG (UserId, Text)) (RowPG NamedChannelFull)
 searchChannelsForUserQ = selectStar $
     from (table #channels) &
-    where_ (#namedChannelFullOwner .== param @1 .&&
-        vector @@ query) &
+    where_ (#namedChannelFullOwner .== param @1) &
     orderBy [
         tsRankCd vector1 query & Desc,
         tsRankCd vector query & Desc
@@ -786,6 +790,14 @@ pruneGhostUsersQ = deleteFrom_ #users
 
 -- MARK: FrontEnd Data Structures
 
+instance HasValidatableText UserCreation where
+    validateText UserCreation{..} = all validateText [
+        userCreationFirstName,
+        userCreationMiddleName,
+        userCreationLastName,
+        userCreationUserFaculty,
+        userCreationUserEmail]
+
 data UserCreation = UserCreation {
     userCreationFirstName :: Text,
     userCreationMiddleName :: Text,
@@ -851,11 +863,13 @@ getChannelForUser uId cId = do
         Nothing -> lift $ S.throwError S.err404
 
 -- TODO: Reject bad requests. Should be binary.
-verifiedUsers :: [UserId] -> StaticPQ [UserId]
-verifiedUsers uIds =
+verifyUsers :: [UserId] -> StaticPQ ()
+verifyUsers uIds =
     case verifiedUserIdsQ uIds of
-        Just uIdsQ -> fmap fromOnly <$> (runQuery uIdsQ >>= getRows)
-        Nothing -> return []
+        Just uIdsQ -> do
+            (us :: [UserId]) <- fmap fromOnly <$> (runQuery uIdsQ >>= getRows)
+            when (length us /= length uIds) $ lift $ S.throwError impossibleContent
+        Nothing -> return ()
 
 deleteGroupChat :: GroupChatId -> StaticPQ ()
 deleteGroupChat gId = do
@@ -917,7 +931,7 @@ getAllUsers :: StaticPQ [User Faculty]
 getAllUsers = fmap rowToUser <$> (runQuery getAllUsersQ >>= getRows)
 
 publishPost :: UserId -> PostCreation -> StaticPQ PostId
-publishPost uId pc  = commitedTransactionallyUpdate $ do
+publishPost uId pc = commitedTransactionallyUpdate $ do
     pId' <- manipulateParams createPostRowQ (uId, postCreationTags pc) >>= firstRow
     case pId' of
         (Just (Only pId)) -> do
@@ -927,7 +941,8 @@ publishPost uId pc  = commitedTransactionallyUpdate $ do
 
 createNewChannel :: UserId -> NamedChannelCreationRequest -> StaticPQ (Maybe NamedChannelId)
 createNewChannel uId req = commitedTransactionallyUpdate $ do
-    uIds <- verifiedUsers . toList $ namedChannelCreationRequestPeopleIds req
+    let uIds = toList $ namedChannelCreationRequestPeopleIds req
+    verifyUsers uIds
     cId <- manipulateParams createNamedChannelQ (addUserToChannelCreate uId (req {namedChannelCreationRequestPeopleIds = fromList uIds})) >>= firstRow
     return $ fmap fromOnly cId
 
@@ -935,14 +950,20 @@ channelCountForUser :: UserId -> StaticPQ Int64
 channelCountForUser uId = (fromMaybe 0 . fmap fromOnly) <$> (runQueryParams countChannelsQ (Only uId) >>= firstRow)
 
 updateChannel :: UserId -> NamedChannel UserId -> StaticPQ ()
-updateChannel uId req = commitedTransactionallyUpdate $ do
-    uIds <- fmap fromList . verifiedUsers . toList $ namedChannelPeopleIds req
+updateChannel uId req = do
+    let uIds = namedChannelPeopleIds req
+    verifyUsers (toList uIds)
     _ <- getChannelForUser uId $ namedChannelId req
-    _ <- manipulateParams updateNamedChannelQ $ addUserToChannelUpdate uId (req {namedChannelPeopleIds = uIds})
+    _ <- commitedTransactionallyUpdate $ manipulateParams updateNamedChannelQ $ addUserToChannelUpdate uId (req {namedChannelPeopleIds = uIds})
     return ()
 
 getFaculty :: Text -> StaticPQ Faculty
 getFaculty t = runQueryParams getFacultyQ (Only t) >>= firstRow >>= fromMaybe404
+
+isValidFaculty :: FacultyUrl -> StaticPQ Bool
+isValidFaculty url = do
+    (faculty :: Maybe Faculty) <- runQueryParams getFacultyQ (Only url) >>= firstRow
+    return $ isJust faculty
 
 updateFaculty :: Faculty -> StaticPQ ()
 updateFaculty fac = void $ manipulateParams updateFacultyQ fac
@@ -980,9 +1001,9 @@ getAllChannels uId = fmap (map removeUserFromChannel) $
     runQueryParams getAllChannelsForUserQ (Only uId) >>= getRows
 
 deleteNamedChannel :: UserId -> NamedChannelId -> StaticPQ ()
-deleteNamedChannel uId cId = commitedTransactionallyUpdate $ do
+deleteNamedChannel uId cId = do
     _ <- getChannelForUser uId cId
-    _ <- manipulateParams deleteNamedChannelQ (Only cId)
+    _ <- commitedTransactionallyUpdate $ manipulateParams deleteNamedChannelQ (Only cId)
     return ()
 
 -- Returns n most popular
@@ -1029,6 +1050,7 @@ sendMessage selfId (MessageCreation (Just gId) uId@Nothing body) = do
         >>= firstRow >>= fromMaybe500
     return mId
 sendMessage selfId (MessageCreation gId@Nothing (Just uId) body) = do
+    verifyUsers [uId]
     (Only mId) <- manipulateParams createMessageQ (selfId, gId, Just uId, body)
         >>= firstRow >>= fromMaybe500
     return mId
@@ -1065,15 +1087,24 @@ getGroupChatForUser uId gId = do
         (Just c) -> return c
         Nothing -> lift $ S.throwError S.err404
 
+groupChatIsValidForUser :: UserId -> GroupChatId -> StaticPQ Bool
+groupChatIsValidForUser uId gId = do
+    (chat :: Maybe GroupChat) <- runQueryParams getGroupChatForUserQ (show uId, gId) >>= firstRow
+    return $ isJust chat
+
 getFacultyFromQuery :: T.Text -> StaticPQ [Faculty]
 getFacultyFromQuery query =
     runQueryParams getFacultySearchResultQ (Only . queryFromTextAbbr $ query) >>= getRows
 
 searchUsers :: T.Text -> StaticPQ [User Faculty]
-searchUsers query =
-    map rowToUser <$> (runQueryParams searchUsersQ (Only . queryFromText $ query) >>= getRows)
+searchUsers query = do
+    unless (validateText query) $ lift $ throwError lengthExceeded
+    if (T.null . T.strip $ query)
+        then return []
+        else map rowToUser <$> (runQueryParams searchUsersQ (Only . queryFromText $ query) >>= getRows)
 
 searchTags :: T.Text -> StaticPQ [Text]
+searchTags "" = return []
 searchTags query = map fromOnly <$>
     (runQueryParams searchTagsQ
         (Only . (<> ":*") . T.strip $ query) >>= getRows)

@@ -56,6 +56,8 @@ import Server.Auth.Mail
 import Web.UAParser
 import qualified Data.Text.Lazy as TL
 import Server.Auth.HTML
+import Data.Char
+import Data.Text.Validator
 
 -- MARK: Documentation
 
@@ -312,7 +314,9 @@ checkToken conn (AuthenticationCookieData uId tokenData) = do
 register :: UserCreation -> Maybe String -> App (Headers '[Header "Set-Cookie" String] NoContent)
 register creation' ua' = do
     let creation = normalizaUser creation'
-    unless (validateUser creation) $ throwError err400
+    unless (validateUser creation && validateText creation) $ throwError err400
+    validFaculty <- runQerror $ isValidFaculty (userCreationUserFaculty creation)
+    unless validFaculty $ throwError impossibleContent
     genToken <- generateTokenM
     let ua = getUserAgent ua'
     GeneratedToken token value code activation deactivation <- runQ err409 . commitedTransactionallyUpdate $ do
@@ -382,8 +386,9 @@ validateEmail :: T.Text -> Bool
 validateEmail "ilyakooo0@gmail.com" = True
 validateEmail "rednikina.com@yandex.ru" = True
 validateEmail "admikhaleva@edu.hse.ru" = True
-validateEmail e = (isJust . matchRegex regex . T.unpack $ e) || (isJust . matchRegex falseRegex . T.unpack $ e)
+validateEmail e = (all validChar email) && ((isJust . matchRegex regex $ email) || (isJust . matchRegex falseRegex $ email))
     where
+        email = T.unpack $ e
         regex = mkRegexWithOpts
             "^[A-Z0-9a-z._%-]+@hse\\.ru$"
             False
@@ -392,3 +397,12 @@ validateEmail e = (isJust . matchRegex regex . T.unpack $ e) || (isJust . matchR
             "^[A-Z0-9a-z._%-+]+@edu.hse\\.ru$"
             False
             False
+
+validChar :: Char -> Bool
+validChar = isPrint
+
+-- checkString :: String -> App String
+-- checkString s =
+--     if any invalidChar s
+--         then throwError formatError
+--         else return s

@@ -26,6 +26,8 @@ import Data.Text (Text)
 import Data.Aeson
 import Control.Applicative ((<|>))
 import Servant.Docs (ToSample, toSamples, samples)
+import Data.Text.Validator
+import Data.Limits
 
 -- MARK: Documentation
 
@@ -34,6 +36,13 @@ instance ToSample (PostElement p) where
         Markdown "# This is a markdown title\nThis is body.",
         Markdown "## This is a subtitle\n_hello._"
         ]
+
+instance HasValidatableText (PostElement p) where
+    validateText (Markdown t) = validateText $ t ~< postElementLengthLimit
+    validateText (Latex t) = validateText $ t ~< postElementLengthLimit
+    validateText (Image t) = validateText $ t ~< postElementLengthLimit
+    validateText (Quote _) = False
+    validateText (Attachment t) = validateText $ t ~< postElementLengthLimit
 
 
 -- MARK: PostElement

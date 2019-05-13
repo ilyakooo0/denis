@@ -32,9 +32,14 @@ import Control.Monad.Trans.Control
 
 type StaticPQ = PoolPQ Schema Handler
 
+printRed :: (Show a) => a -> IO ()
+printRed a = do
+    putStr "\a\x001b[31m"
+    print a
+    putStr "\x001b[0m"
 
 runQ :: ServantErr -> StaticPQ a -> App a
-runQ err req = handleSqueal ((>> throwError err) . liftIO . print) $ asks getPool >>= lift . runPoolPQ req
+runQ err req = handleSqueal ((>> throwError err) . liftIO . printRed) $ asks getPool >>= lift . runPoolPQ req
 
 runQ' :: DBConnection -> ServantErr -> StaticPQ a -> Handler a
 runQ' conn err req = handleSqueal (const $ throwError err) $ runPoolPQ req conn
