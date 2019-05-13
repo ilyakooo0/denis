@@ -15,6 +15,8 @@ import Data.Char
 import Data.Limits
 
 isValidChar :: Char -> Bool
+isValidChar '\n' = True
+isValidChar '\r' = True
 isValidChar = isPrint
 
 class HasValidatableText t where
