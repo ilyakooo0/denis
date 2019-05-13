@@ -1006,7 +1006,6 @@ deleteNamedChannel uId cId = do
     _ <- commitedTransactionallyUpdate $ manipulateParams deleteNamedChannelQ (Only cId)
     return ()
 
--- Returns n most popular
 getTags :: Limit -> StaticPQ [String]
 getTags lim = map fromOnly <$> (runQuery (getNpopularTagsQ lim) >>= getRows)
 
@@ -1057,20 +1056,24 @@ sendMessage selfId (MessageCreation gId@Nothing (Just uId) body) = do
 sendMessage _ _ = lift $ S.throwError S.err400
 
 createGroupChat :: UserId -> GroupChatCreation -> StaticPQ GroupChatId
-createGroupChat uId (GroupChatCreation (Jsonb chatUsers) name) = commitedTransactionallyUpdate $ do
-    let chatUsers' = M.insert uId maxChatPermissions chatUsers
-    (Only chatId) <- manipulateParams createGroupChatQ (GroupChatCreation (Jsonb chatUsers') name)
-        >>= firstRow >>= fromMaybe500
-    _ <- manipulateParams createPhantomMessageQ (Only chatId)
-    return chatId
+createGroupChat uId (GroupChatCreation (Jsonb chatUsers) name) = do
+    verifyUsers . M.keys $ chatUsers
+    commitedTransactionallyUpdate $ do
+        let chatUsers' = M.insert uId maxChatPermissions chatUsers
+        (Only chatId) <- manipulateParams createGroupChatQ (GroupChatCreation (Jsonb chatUsers') name)
+            >>= firstRow >>= fromMaybe500
+        _ <- manipulateParams createPhantomMessageQ (Only chatId)
+        return chatId
 
 updateGroupChat :: UserId -> GroupChat -> StaticPQ ()
-updateGroupChat uId (GroupChat gId (Jsonb perms) name) = commitedTransactionallyUpdate $ do
-    (GroupChat _ (Jsonb perms') _) <- getGroupChatForUser uId gId
-    let userPerm = fromMaybe minChatPermissions $ M.lookup uId perms'
-    unless (isAdmin userPerm) $ lift $ S.throwError $ S.err401
-    let newPerms = M.insert uId userPerm perms
-    void $ manipulateParams updateGroupChatQ (GroupChat gId (Jsonb newPerms) name)
+updateGroupChat uId (GroupChat gId (Jsonb perms) name) = do
+    verifyUsers . M.keys $ perms
+    commitedTransactionallyUpdate $ do
+        (GroupChat _ (Jsonb perms') _) <- getGroupChatForUser uId gId
+        let userPerm = fromMaybe minChatPermissions $ M.lookup uId perms'
+        unless (isAdmin userPerm) $ lift $ S.throwError $ S.err401
+        let newPerms = M.insert uId userPerm perms
+        void $ manipulateParams updateGroupChatQ (GroupChat gId (Jsonb newPerms) name)
 
 leaveGroupChat :: UserId -> GroupChatId -> StaticPQ ()
 leaveGroupChat uId gId = commitedTransactionallyUpdate $ do
@@ -1099,7 +1102,7 @@ getFacultyFromQuery query =
 searchUsers :: T.Text -> StaticPQ [User Faculty]
 searchUsers query = do
     unless (validateText query) $ lift $ throwError lengthExceeded
-    if (T.null . T.strip $ query)
+    if (T.null . T.filter isAlpha $  query)
         then return []
         else map rowToUser <$> (runQueryParams searchUsersQ (Only . queryFromText $ query) >>= getRows)
 
@@ -1228,7 +1231,7 @@ queryFromTextAbbr = T.unwords . L.intersperse "&" . map processTerm . filter (no
             ) <> ")"
 
 queryFromText :: Text -> Text
-queryFromText = T.unwords . L.intersperse "&" . map processTerm . filter (not . T.null) . T.split (not . isAlphaNum)
+queryFromText = T.unwords . L.intersperse "&" . map processTerm . filter (not . T.null) . T.split (not . isPrint)
     where
         processTerm :: Text -> Text
         processTerm t = t <> ":*"

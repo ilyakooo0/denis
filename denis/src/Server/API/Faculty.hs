@@ -23,6 +23,7 @@ import Data.Faculty
 import Data.Text.Validator
 import Control.Monad
 import Server.Error
+import Data.Char
 
 type SearchDescription = Description "Returns faculties for given string"
 
@@ -34,7 +35,7 @@ facultyServer = search
 
 search :: Text -> App [Faculty]
 search query = do
-    if T.null . T.strip $ query
+    if T.null . T.filter (not . isSpace) . T.filter isPrint $ query
         then return []
     else do
         unless (validateText query) $ throwError lengthExceeded

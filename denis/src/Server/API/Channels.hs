@@ -28,6 +28,7 @@ import Data.Text.Validator
 import Control.Monad
 import Data.Limits
 import qualified Data.Text as T
+import Data.Char
 
 type CreateDescription = Description "Creates a new channel\n\nReturns 406 if the channel limit has been exceeded."
 
@@ -88,6 +89,6 @@ deleteChannelApi uId cId = do
 searchChannelsApi :: UserId -> Text -> App [NamedChannel UserId]
 searchChannelsApi uId query = do
     unless (validateText query) $ throwError lengthExceeded
-    if (T.null . T.strip) query
+    if (T.null . T.filter (not . isSpace) . T.filter isPrint) query
         then return []
         else runQerror . searchChannels uId $ query

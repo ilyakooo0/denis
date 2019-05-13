@@ -21,6 +21,8 @@ import Data.Query
 import Data.Text (Text)
 import Data.Tags.Validation
 import Server.Error
+import qualified Data.Text as T
+import Data.Char
 
 type CompletionsDescription = Description "\
     \Gets tag completion tree\n\n\
@@ -73,7 +75,9 @@ completionHandler :: App CompletionTree
 completionHandler = runQerror $ mkCompletionTree <$> getTags 1000
 
 tagSearch :: Text -> App [Text]
-tagSearch "" = return []
-tagSearch query' = do
-    query <- fromMaybeThrow formatError . return $ validateTag query'
-    runQerror . searchTags $ query
+tagSearch query' =
+    if T.null . T.filter (not . isSpace) . T.filter isPrint $ query'
+        then return []
+        else do
+            query <- fromMaybeThrow formatError . return $ validateTag query'
+            runQerror . searchTags $ query
