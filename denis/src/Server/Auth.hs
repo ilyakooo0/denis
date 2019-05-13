@@ -11,6 +11,7 @@
     DeriveAnyClass,
     RecordWildCards #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
+
 module Server.Auth (
     checkToken,
     cookieTokenKey,
@@ -19,7 +20,8 @@ module Server.Auth (
     logIn,
     contextProxy,
     AuthenticationCredits(..),
-    authenticationAPI
+    authenticationAPI,
+    TokenActivationData
 ) where
 
 import Server.App
@@ -160,7 +162,7 @@ data AuthenticationCookieData = AuthenticationCookieData {
 data TokenActivationData = TokenActivationData {
     tokenVerificationUserId :: UserId,
     tokenVerificationData :: BS.ByteString
-} deriving (Show)
+} deriving (Show, GHC.Generic)
 
 instance ToJSON TokenActivationData where
     toJSON (TokenActivationData uId vData) = object [

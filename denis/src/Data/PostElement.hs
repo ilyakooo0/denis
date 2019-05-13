@@ -15,7 +15,8 @@ module Data.PostElement (
     MkElementRow,
     PostElementRow(..),
     PostElement(..),
-    elementsToRows
+    elementsToRows,
+    PostQuote(..)
 ) where
 
 import Data.Int (Int64)
@@ -40,9 +41,9 @@ instance ToSample (PostElement p) where
 data PostElement a = Markdown Text
     | Latex Text
     | Image Text
-    | Quote PostQuote
+    | Quote ()
     | Attachment Text
-    deriving (Show)
+    deriving (Show, GHC.Generic)
 
 instance ToJSON (PostElement t) where
     toJSON (Markdown m) = object ["markdown" .= m]
@@ -69,7 +70,8 @@ elemenToRow f el = case el of
     Markdown m -> f (Just m) Nothing Nothing Nothing Nothing
     Latex l -> f Nothing (Just l) Nothing Nothing Nothing
     Image i -> f Nothing Nothing (Just i) Nothing Nothing
-    Quote q -> f Nothing Nothing Nothing (Just $ quoteId q) Nothing
+    -- Quote q -> f Nothing Nothing Nothing (Just $ (quoteId q)) Nothing
+    Quote _ -> f Nothing Nothing Nothing Nothing Nothing
     Attachment a -> f Nothing Nothing Nothing Nothing (Just a)
 
 rowsToElement :: MkElementRow (Maybe (PostElement p))
@@ -105,7 +107,7 @@ data PostQuote = PostQuote {
     quoteId :: Int64,
     quoteBody :: [PostElement PostQuote],
     quotePostId :: Int64
-} deriving (Show)
+} deriving (Show, GHC.Generic)
 
 instance ToJSON PostQuote where
     toJSON (PostQuote qId pb pId) = object [

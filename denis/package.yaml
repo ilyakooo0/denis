@@ -63,6 +63,10 @@ dependencies:
 - blaze-html
 - servant-blaze
 - random
+- hspec
+- generic-arbitrary
+- quickcheck-instances
+- http-client
 
 library:
   source-dirs: src
@@ -105,4 +109,13 @@ executables:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
+    - denis
+  test:
+    main: Spec.hs
+    source-dirs: src/test
+    ghc-options:
+    - -threaded
+    dependencies:
+    - QuickCheck
+    - servant-quickcheck
     - denis

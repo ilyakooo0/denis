@@ -1,7 +1,12 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE
+    OverloadedStrings,
+    TypeOperators,
+    DataKinds #-}
 
 module Server.Server (
-    runServer
+    runServer,
+    hoistedServer,
+    getConfig
 ) where
 
 import Server.API
@@ -49,6 +54,11 @@ getConfig = do
     mail <- getMailConfig
     return $ Config conn crypto selfRoot mail
 
+hoistedServer :: Logger -> Config -> Server API
+hoistedServer logger cfg =
+    let serverAPI = mkServerAPI logger
+    in hoistServerWithContext serverProxy contextProxy (flip runReaderT cfg) serverAPI
+
 runServer :: IO ()
 runServer = do
     port <- getServerPort
@@ -57,14 +67,13 @@ runServer = do
     _ <- periodically (20 * minutes) $ runDbTask cfg pruneAuth
     let ctx = genAuthServerContext $ getPool cfg
     (middleLogger, logger) <- mkLogger 500
-    let serverAPI = mkServerAPI logger
-    let s = hoistServerWithContext serverProxy contextProxy (flip runReaderT cfg) serverAPI
+    let s = hoistedServer logger cfg
     runSettings (settings port) $ cors (const $ Just policy) . middleLogger $ serveWithContext serverProxy ctx s
 
 policy :: CorsResourcePolicy
 policy = CorsResourcePolicy {
     corsOrigins = Just (["http://localhost:8080", "http://localhost:4000", "http://127.0.0.1:4000", "http://127.0.0.1:8080", "http://lvh.me:4000", "http://lvh.me:8080", "http://valera-kristina.herokuapp.com", "https://valera-kristina.herokuapp.com"], True), -- Nothing,
-    corsMethods=[methodGet, methodPost],
+    corsMethods=[methodGet, methodPost, methodDelete],
     corsRequestHeaders = ["content-type"],
     corsExposedHeaders = Nothing,
     corsMaxAge = Nothing,
