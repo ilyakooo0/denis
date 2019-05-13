@@ -4,7 +4,8 @@
     OverloadedLabels,
     OverloadedStrings ,
     TypeApplications ,
-    TypeOperators #-}
+    TypeOperators,
+    RecordWildCards #-}
 
 module Server.API.Messages (
     MessagesApi,
@@ -24,6 +25,9 @@ import Server.Query.Dialog
 import Data.Text.Validator
 import Control.Monad
 import Server.Error
+import qualified Data.Map as M
+import Squeal.PostgreSQL.Schema
+import Data.Limits
 
 type GetAllChatsDescription = Description "Gets chats starting from/ending with the given message id."
 type GetGroupChatDescription = Description "Gets information about a given group chat."
@@ -94,8 +98,9 @@ sendMessageApi uId mes = do
     runQerror $ sendMessage uId mes
 
 createGroupChatApi :: UserId -> GroupChatCreation -> App GroupChatId
-createGroupChatApi uId group = do
+createGroupChatApi uId group@GroupChatCreation{..} = do
     unless (validateText group) $ throwError lengthExceeded
+    unless ((M.size $ getJsonb groupChatCreationUsers) < groupChatSizeLimit) $ throwError amountExceeded
     runQerror $ createGroupChat uId group
 
 leaveChatAPI :: UserId -> GroupChatId -> App NoContent

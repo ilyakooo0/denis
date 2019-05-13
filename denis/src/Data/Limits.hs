@@ -30,3 +30,6 @@ listLimit = 100
 
 globalTextLimit :: Int
 globalTextLimit = 50000
+
+groupChatSizeLimit :: Int
+groupChatSizeLimit = 256
