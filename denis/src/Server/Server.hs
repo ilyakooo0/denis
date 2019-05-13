@@ -73,7 +73,7 @@ runServer = do
 policy :: CorsResourcePolicy
 policy = CorsResourcePolicy {
     corsOrigins = Just (["http://localhost:8080", "http://localhost:4000", "http://127.0.0.1:4000", "http://127.0.0.1:8080", "http://lvh.me:4000", "http://lvh.me:8080", "http://valera-kristina.herokuapp.com", "https://valera-kristina.herokuapp.com"], True), -- Nothing,
-    corsMethods=[methodGet, methodPost],
+    corsMethods=[methodGet, methodPost, methodDelete],
     corsRequestHeaders = ["content-type"],
     corsExposedHeaders = Nothing,
     corsMaxAge = Nothing,
