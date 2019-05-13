@@ -27,3 +27,6 @@ channelCountLimit = 128
 
 listLimit :: Int
 listLimit = 100
+
+globalTextLimit :: Int
+globalTextLimit = 20000
