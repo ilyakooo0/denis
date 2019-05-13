@@ -17,7 +17,7 @@ import Data.Limits
 isValidChar :: Char -> Bool
 isValidChar '\n' = True
 isValidChar '\r' = True
-isValidChar = isPrint
+isValidChar c = isPrint c
 
 class HasValidatableText t where
     validateText :: t -> Bool
