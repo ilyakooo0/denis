@@ -63,6 +63,7 @@ runServer :: IO ()
 runServer = do
     port <- getServerPort
     cfg <- getConfig
+    updateFaculties cfg
     _ <- periodically (1 * hours) $ updateFaculties cfg
     _ <- periodically (20 * minutes) $ runDbTask cfg pruneAuth
     let ctx = genAuthServerContext $ getPool cfg
