@@ -1,4 +1,4 @@
-{-# LANGUAGE
+    {-# LANGUAGE
     DataKinds ,
     DeriveGeneric ,
     OverloadedLabels,
@@ -9,11 +9,9 @@
     RecordWildCards #-}
 
 module Data.Channel.AnonymousChannel (
-    AnonymousChannelId,
     AnonymousChannel(..)
 ) where
 
-import Data.Int (Int64)
 import qualified Generics.SOP as SOP
 import qualified GHC.Generics as GHC
 import Data.Aeson
@@ -35,8 +33,6 @@ instance HasValidatableText AnonymousChannel where
     validateText AnonymousChannel{..} = all (validateText . (~= validateTag')) anonymousChannelTags
 
 -- MARK: Implementation
-
-type AnonymousChannelId = Int64
 
 data AnonymousChannel = AnonymousChannel {
     anonymousChannelTags :: V.Vector Text,
