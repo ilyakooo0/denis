@@ -22,5 +22,4 @@ validChars :: S.Set Char
 validChars = S.fromList "йцукенгшщзхъфывапролджэёячсмитьбюqwertyuiopasdfghjklzxcvbnm1234567890_"
 
 validChar :: Char -> Bool
-validChar = True
 validChar c = S.member (C.toLower c) validChars
