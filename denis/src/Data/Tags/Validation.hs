@@ -4,7 +4,8 @@ module Data.Tags.Validation (
     ) where
 
 import Data.Text as T
-import Data.Char
+import Data.Char as C
+import qualified Data.Set as S
 
 validateTag :: T.Text -> Maybe T.Text
 validateTag tag =
@@ -17,6 +18,9 @@ validateTag tag =
 validateTag' :: T.Text -> Bool
 validateTag' = T.all validChar
 
+validChars :: S.Set Char
+validChars = S.fromList "йцукенгшщзхъфывапролджэёячсмитьбюqwertyuiopasdfghjklzxcvbnm"
+
 validChar :: Char -> Bool
-validChar '-' = True
-validChar c = isAlphaNum c
+validChar '_' = True
+validChar c = S.member (C.toLower c) validChars
