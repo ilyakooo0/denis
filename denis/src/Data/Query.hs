@@ -935,7 +935,7 @@ publishPost uId pc = commitedTransactionallyUpdate $ do
     pId' <- manipulateParams createPostRowQ (uId, postCreationTags pc) >>= firstRow
     case pId' of
         (Just (Only pId)) -> do
-            traversePrepared_ createPostElementRowsQ $ elementsToRows pId (postCreationBody pc)
+            traversePrepared_ createPostElementRowsQ $ elementsToRows pId (map stripPostElement $ postCreationBody pc)
             return pId
         _ -> lift $ S.throwError S.err404
 
@@ -1043,9 +1043,9 @@ getMessagesInGroupChat selfId gId mId lim dir = do
     return . catMaybes . map restoreMessage $ resp
 
 sendMessage :: UserId -> MessageCreation -> StaticPQ MessageId
-sendMessage selfId (MessageCreation (Just gId) uId@Nothing body) = do
+sendMessage selfId (MessageCreation (Just gId) uId@Nothing (Jsonb body)) = do
     _ <- getGroupChatForUser selfId gId
-    (Only mId) <- manipulateParams createMessageQ (selfId, Just gId, uId, body)
+    (Only mId) <- manipulateParams createMessageQ (selfId, Just gId, uId, Jsonb $ stripPostElement body)
         >>= firstRow >>= fromMaybe500
     return mId
 sendMessage selfId (MessageCreation gId@Nothing (Just uId) body) = do

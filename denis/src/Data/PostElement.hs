@@ -16,13 +16,14 @@ module Data.PostElement (
     PostElementRow(..),
     PostElement(..),
     elementsToRows,
-    PostQuote(..)
+    PostQuote(..),
+    stripPostElement
 ) where
 
 import Data.Int (Int64)
 import qualified Generics.SOP as SOP
 import qualified GHC.Generics as GHC
-import Data.Text (Text)
+import Data.Text (Text, strip)
 import Data.Aeson
 import Control.Applicative ((<|>))
 import Servant.Docs (ToSample, toSamples, samples)
@@ -53,6 +54,11 @@ data PostElement a = Markdown Text
     | Quote ()
     | Attachment Text
     deriving (Show, GHC.Generic)
+
+stripPostElement :: (PostElement a) -> (PostElement a)
+stripPostElement (Markdown t) = Markdown (strip t)
+stripPostElement (Latex t) = Latex (strip t)
+stripPostElement u = u
 
 instance ToJSON (PostElement t) where
     toJSON (Markdown m) = object ["markdown" .= m]
