@@ -7,12 +7,7 @@
     RecordWildCards #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
-module Server.API (
-        API,
-        serverProxy,
-        mkServerAPI,
-        Authentication
-) where
+module Server.API where
 
 import Data.Proxy
 import Servant.API
@@ -42,13 +37,19 @@ import Data.Text.Validator
 
 instance HasDocs api => HasDocs (Authentication :> api) where
         docsFor Proxy (endpoint, action) =
-            docsFor (Proxy :: Proxy api) (endpoint, action & notes <>~ [DocNote "Authentication" ["This method requires cookies set in the `POST /authenticate` method.\n\nReturns error `498 Invalid Token` if the token is invalid or the token header is missing. Returns `401 Unathorized` if the token doesn't permit access to the requested data."]])
+            docsFor (Proxy :: Proxy api) (endpoint, action & notes <>~ [DocNote "Authentication" ["Этот метод требует токен, который можно получить через запрос `POST /authenticate/login`.\n\nВозвращает `498 Invalid Token` если токен не валидный или отсутствует. Возвращает `401 Unathorized` если токен не дает доступа к запрашиваемому ресурсу."]])
 
-type UserSearchDescription = Description "Searches for users with the given string.\n\nFeed in the raw user input string."
+type UserSearchDescription = Description "Ищет пользователей по данной строке."
 
-type UpdateUserDescription = Description "Updates the current user.\n\nThrow 401 if you try to change email or something like that."
+type UpdateUserDescription = Description "Обновляет профиль текущего пользователя."
 
-type DeactivateAllDescription = Description "Deactivates all tokens for the logged in user including the one used to authenticate this request."
+type DeactivateAllDescription = Description "Деактивирует все токены для текущего пользователя."
+
+type MeDescription = Description "Возвращает идентификатор текущего пользователя."
+
+type UsersDescription = Description "Возвращает пользователей для данных идентификаторов."
+
+type UsersAllDescription = Description "Возвращает всех пользователей."
 
 -- MARK: Implementation
 
@@ -58,11 +59,11 @@ type API =
         LoggerAPI :<|>
         "authentication" :> AuthenticationHandler :<|>
         Authentication :> ComplexQuery :> (
-            "authentication" :> "me" :> Post '[JSON] UserId :<|>
+            "authentication" :> "me" :> MeDescription :> Post '[JSON] UserId :<|>
             "deactivateAll" :> DeactivateAllDescription
                 :> DeleteNoContent '[JSON, PlainText, FormUrlEncoded] NoContent :<|>
-            "users" :> ReqBody '[JSON] [UserId] :> Post '[JSON] [User Faculty] :<|>
-            "users" :> "all" :> Post '[JSON] [User Faculty] :<|>
+            "users" :> UsersDescription :> ReqBody '[JSON] [UserId] :> Post '[JSON] [User Faculty] :<|>
+            "users" :> "all" :> UsersAllDescription :> Post '[JSON] [User Faculty] :<|>
             "users" :> "search" :> UserSearchDescription :> ReqBody '[JSON, PlainText] Text :> Post '[JSON] [User Faculty] :<|>
             "users" :> "update" :> UpdateUserDescription :> ReqBody '[JSON] UserUpdate :> PostNoContent '[JSON, PlainText] NoContent :<|>
             "posts" :> PostApi :<|>

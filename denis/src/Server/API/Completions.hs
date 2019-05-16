@@ -7,10 +7,7 @@
     TypeOperators,
     LambdaCase #-}
 
-module Server.API.Completions (
-    TagsAPI,
-    tagsServer
-    ) where
+module Server.API.Completions where
 
 import Servant.Server
 import Servant
@@ -25,14 +22,14 @@ import qualified Data.Text as T
 import Data.Char
 
 type CompletionsDescription = Description "\
-    \Gets tag completion tree\n\n\
+    \Возвращает дерево тегов.\n\n\
     \```haskell\n\
     \data CompletionTree = CompletionTreeNode {\n\
     \    value :: Maybe String,\n\
     \    subtree :: Map Char CompletionTree\n\
     \}\n\
     \```\n\n\
-    \The psuedocode for retrieving all completions from the tree:\n\n\
+    \Псевдокод для получения всех подсказок:\n\n\
     \```swift\n\
     \func getCompletion(tree: CompletionTree, word: String) -> [String] {\n\
     \    if word == \"\" {\n\
@@ -63,7 +60,7 @@ type CompletionsDescription = Description "\
     \}\n\
     \```"
 
-type SearchDescription = Description "Returns top 1000 tag completions for given user input."
+type SearchDescription = Description "Возвращает 1000 самых популярных тегов для запроса пользователя."
 
 type TagsAPI = "completions" :> CompletionsDescription :> Get '[JSON] CompletionTree :<|>
     "search" :> SearchDescription :> ReqBody '[JSON, PlainText] Text :> Post '[JSON] [Text]

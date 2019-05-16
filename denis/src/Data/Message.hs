@@ -11,15 +11,7 @@
 {-# OPTIONS_GHC -fno-warn-unused-top-binds #-}
 
 
-module Data.Message (
-    MessageStorage(..),
-    Message(..),
-    MessageDetination(..),
-    MessageId,
-    restoreMessage,
-    storeMessage,
-    MessageCreation(..)
-    ) where
+module Data.Message where
 
 import Data.Aeson
 import Data.PostElement
@@ -51,18 +43,31 @@ instance HasValidatableText Message where
 instance HasValidatableText MessageCreation where
     validateText (MessageCreation _ _ (Jsonb mb)) = validateText mb
 
+-- |Идентификатор сообщения в групповой беседе.
 type GroupChatMessageId = Int64
 
-data MessageDetination = GroupChatDestination GroupChatId | UserChatDestination UserId
+-- |Адресат сообщения.
+data MessageDetination
+    -- |Групповая беседа.
+    = GroupChatDestination GroupChatId
+    -- |Пользоваель.
+    | UserChatDestination UserId
     deriving (Show)
 
+--  |Идентификатор сообщения
 type MessageId = Int64
 
+-- |Объект обычного представления сообщения.
 data Message = Message {
+    -- |Идентификатор сообщения.
     messageId :: MessageId,
+    -- |Идентификатор автора сообщения.
     messageAuthorId :: UserId,
+    -- |Адресат сообщения.
     messageDestinationId :: MessageDetination,
+    -- |Содержание сообщения.
     messageBody :: PostElement Message,
+    -- |Время отправки сообщения.
     messageTime :: UTCTime
 } deriving (Show)
 
@@ -86,13 +91,19 @@ instance FromJSON Message where
             <*> e .: "body"
             <*> e .: "time"
 
-
+-- |Объект для представления сообщения в базе данных.
 data MessageStorage = MessageStorage {
+    -- |Идентификатор сообщения.
     messageStorageId :: MessageId,
+    -- |Идентификатор автора сообщения.
     messageStorageAuthorId :: Maybe UserId,
+    -- |Идентификатор групповой беседы как адресата сообщения.
     messageStorageDestinationGroupId :: Maybe GroupChatId,
+    -- |Идентификатор пользователя как адресата сообщения.
     messageStorageDestinationUserId :: Maybe UserId,
+    -- |Содержание сообщения.
     messageStorageBody :: Maybe (Jsonb (PostElement Message)),
+    -- |Время отправки сообщения.
     messageStorageTime :: UTCTime
 } deriving GHC.Generic
 
@@ -101,9 +112,11 @@ instance SOP.HasDatatypeInfo (MessageStorage)
 
 infixl 4 <>>
 
+-- |Оператор, применяющий функция в функторе к объекту вне функтора.
 (<>>) :: Applicative f => f (a -> b) -> a -> f b
 f <>> a = f <*> pure a
 
+-- |Функция, переводящая представление сообщения из базы данных в обычное.
 restoreMessage :: MessageStorage -> Maybe Message
 restoreMessage (MessageStorage mId (Just aId) gId uId (Just (Jsonb pb)) mt) =
     Message mId aId <$> case (gId, uId) of
@@ -113,6 +126,7 @@ restoreMessage (MessageStorage mId (Just aId) gId uId (Just (Jsonb pb)) mt) =
         <>> pb <>> mt
 restoreMessage _ = Nothing
 
+-- |Функция переводящая обычное представление сообщения в представление для базы данных.
 storeMessage :: Message -> MessageStorage
 storeMessage (Message mId aId dId pb mt) = case dId of
     GroupChatDestination gId -> MessageStorage mId (Just aId) (Just gId) Nothing (Just (Jsonb pb)) mt
@@ -124,9 +138,13 @@ instance ToSample MessageCreation where
         (MessageCreation (Just 5) Nothing <$>
         map (Jsonb . snd) (toSamples Proxy))
 
+-- |Объект для создания сообщения.
 data MessageCreation = MessageCreation {
+    -- |Идентификатор групповой беседы - адресата сообщения.
     messageCreationDestinationGroupId :: Maybe GroupChatId,
+    -- |Идентификатор пользователя - адресата сообщения.
     messageCreationDestinationUserId :: Maybe UserId,
+    -- |Содержание сообщения.
     messageCreationBody :: Jsonb (PostElement (MessageCreation))
 } deriving (Show, GHC.Generic)
 

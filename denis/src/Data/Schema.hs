@@ -9,16 +9,14 @@
     KindSignatures #-}
 
 
-module Data.Schema (
-    Schema,
-    createTables
-) where
+module Data.Schema where
 
 import Squeal.PostgreSQL
 import Data.GroupChat
 import Data.PostElement
 import Data.Message
 
+-- |Таблицы базы данных
 type Schema =
     '[
         "faculties" ::: 'Table ('[
@@ -188,7 +186,7 @@ type Schema =
 
     ]
 
-
+-- |Создает таблицы базы данных.
 createTables :: Definition '[] Schema
 createTables = createTable #faculties (
         notNullable text `as` #facultyName :*

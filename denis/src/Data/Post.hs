@@ -7,15 +7,7 @@
     TypeOperators,
     OverloadedStrings #-}
 
-module Data.Post (
-    Post(..),
-    PostElement,
-    rowsToPost,
-    PostId,
-    QuoteId,
-    PostRowResponse(..),
-    PostCreation(..)
-) where
+module Data.Post where
 
 import Data.Int (Int64)
 import qualified Generics.SOP as SOP
@@ -46,14 +38,22 @@ instance HasValidatableText PostCreation where
 
 -- MARK: Actual type
 
+-- |Идентификатор поста.
 type PostId = Int64
+-- |Идентификатор цитаты.
 type QuoteId = Int64
 
+-- |Объект поста
 data Post = Post {
+    -- |Идентификатор поста.
     postId :: Int64,
+    -- |Идентификатор автора поста.
     postAuthorId :: Int64,
+    -- |Время последнего обновления поста.
     updated :: UTCTime,
+    -- |Теги поста.
     postTags :: V.Vector Text,
+    -- |Содержание поста.
     postBody :: [PostElement Post]
 } deriving (Show)
 
@@ -65,8 +65,11 @@ instance ToJSON Post where
         "tags" .= tags,
         "body" .= pb ]
 
+-- |Объект для создания поста
 data PostCreation = PostCreation {
+    -- |Содержание поста.
     postCreationBody :: [PostElement Post],
+    -- |Теги поста.
     postCreationTags :: V.Vector Text
 } deriving GHC.Generic
 
@@ -86,29 +89,41 @@ instance FromJSON PostCreation where
 -- MARK: Rows
 
 -- Need to manually maintain. Future: https://github.com/morphismtech/squeal/issues/96
-
+-- |Объект поста при ответе с базы данных.
 data PostRowResponse = PostRowResponse {
     -- PostRow
+    -- |Идентификатор поста.
     postRowId :: Int64,
+    -- |Идентификатор автора поста.
     postRowAuthorId :: Int64,
+    -- |Время последнего обновления поста.
     postRowUpdateTime :: UTCTime,
+    -- |Теги поста.
     postRowTags :: V.Vector Text,
 
     -- ElementRow
+    -- |Порядковый номер элемента поста.
     rowElementOrd :: Int64,
+    -- |Markdown элемент поста.
     rowElementMarkdown :: Maybe Text,
+    -- |Latex элемент поста.
     rowElementLatex :: Maybe Text,
+    -- |Изображение.
     rowElementImage :: Maybe Text,
+    -- |Цитата.
     rowElementQuote :: Maybe Int64,
+    -- |Файл.
     rowElementAttachment :: Maybe Text
 } deriving (GHC.Generic)
 
 instance SOP.Generic PostRowResponse
 instance SOP.HasDatatypeInfo PostRowResponse
 
+-- |Функция, переводящая объект поста при ответе с базы данных в какой-то поста при помощи данного отображения.
 unRow :: MkElementRow x -> PostRowResponse -> x
 unRow f' (PostRowResponse _ _ _ _ _ a b c d e) = f' a b c d e
 
+-- |Функция, переводящая объект поста при ответе с базы данных в обычный объект поста.
 rowsToPost :: [PostRowResponse] -> Maybe Post
 rowsToPost [] = Nothing
 rowsToPost (el:els) = if all (((==) `on` postRowId) el) els

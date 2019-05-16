@@ -9,12 +9,7 @@
     DeriveAnyClass,
     RecordWildCards #-}
 
-module Data.User (
-    User(..),
-    UserId,
-    UserEmail,
-    UserUpdate(..)
-) where
+module Data.User where
 
 import Data.Int (Int64)
 import qualified Generics.SOP as SOP
@@ -30,25 +25,35 @@ import Data.Text.Validator
 -- MARK: Documentation
 
 instance (ToSample f) => ToSample (User f) where
-    toSamples _ = samples $ [User 8 "Vasya" "Pupkinovuch" "Pupkin", User 69 "Seva" "Algebrovich" "Leonidov"] <*> (map snd $ toSamples Proxy) <*> ["foo@hse.ru"]
+    toSamples _ = samples $ [User 8 "Vasya" "Pupkinovuch" "Pupkin"] <*> (map snd $ toSamples Proxy) <*> ["foo@hse.ru"]
 
 instance ToSample (UserUpdate) where
-    toSamples _ = samples $ [UserUpdate "Vasya" "Pupkinovuch" "Pupkin", UserUpdate "Seva" "Algebrovich" "Leonidov"] <*> ["cs.hse.ru/dse/"]
+    toSamples _ = samples $ [UserUpdate "Vasya" "Pupkinovuch" "Pupkin"] <*> ["cs.hse.ru/dse/"]
 
 instance HasValidatableText UserUpdate where
     validateText UserUpdate{..} = all (validateText . (~< userFieldLengthLimit)) [userUpdateFirstName, userUpdateMiddleName, userUpdateLastName, userUpdateUserFaculty]
 
 -- MARK: Implementation
 
+-- |Идентификатор пользователя.
 type UserId = Int64
+
+-- |Адрес почты пользователя.
 type UserEmail = Text
 
+-- |Пользователь.
 data User f = User {
+    -- |Идентификатор.
     userId :: UserId,
+    -- |Имя.
     firstName :: Text,
+    -- |Фамилия.
     middleName :: Text,
+    -- |Отчество.
     lastName :: Text,
+    -- |Факультет.
     userFaculty :: f,
+    -- |Адрес почты.
     userEmail :: UserEmail
 } deriving (GHC.Generic, SOP.Generic, SOP.HasDatatypeInfo)
 
@@ -66,10 +71,15 @@ instance (FromJSON f) => FromJSON (User f) where
     parseJSON = withObject "named channel" $ \e ->
         User <$> e .: "id" <*> e .: "firstName" <*> e .: "middleName" <*> e .: "lastName" <*> e .: "faculty" <*> e .: "email"
 
+-- |Объект для обновления пользователя.
 data UserUpdate = UserUpdate {
+    -- |Имя.
     userUpdateFirstName :: Text,
+    -- |Отчество.
     userUpdateMiddleName :: Text,
+    -- |Фамилия.
     userUpdateLastName :: Text,
+    -- |Факультет.
     userUpdateUserFaculty :: FacultyUrl
 } deriving (GHC.Generic, SOP.Generic, SOP.HasDatatypeInfo)
 

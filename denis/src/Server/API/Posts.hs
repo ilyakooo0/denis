@@ -6,10 +6,7 @@
     TypeApplications ,
     TypeOperators #-}
 
-module Server.API.Posts (
-    PostApi,
-    postApi
-) where
+module Server.API.Posts where
 
 import Servant.API
 import qualified Data.Post as P
@@ -23,6 +20,13 @@ import Data.Limits
 import Server.Error
 import Control.Monad
 import Data.Text.Validator
+import Servant.Docs
+import Control.Monad.Except
+
+type PostDescription = Description "Возвращает пост по идентификатору."
+type LastPostDescription = Description "Возвращает несколько последних постов, начиная с данного."
+type ForUserPostDescription = Description "Возвращает несколько последних постов для пользователя, начиная с данного."
+type PublishPostDescription = Description "Публикует пост."
 
 -- MARK: Implementation
 

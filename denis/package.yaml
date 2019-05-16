@@ -67,6 +67,7 @@ dependencies:
 - generic-arbitrary
 - quickcheck-instances
 - http-client
+- blaze-markup
 
 library:
   source-dirs: src

@@ -12,9 +12,7 @@
     RecordWildCards #-}
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
-module Server.Auth.Mail (
-    sendTokenVerificationEmail
-    ) where
+module Server.Auth.Mail where
 
 import Network.Mail.SMTP
 import Server.App
@@ -29,6 +27,7 @@ import Text.Blaze.Html.Renderer.Text
 import Data.ByteString (ByteString)
 import Data.User
 import Data.ByteString.Char8 (unpack)
+import Control.Monad.Reader
 
 sendTokenVerificationEmail :: TokenVerificationCode -> UserId -> ByteString -> ByteString -> TL.Text -> Text -> App ()
 sendTokenVerificationEmail userCode uId activation deactivation ua email = do

@@ -7,10 +7,7 @@
     TypeOperators,
     LambdaCase #-}
 
-module Server.API.Faculty (
-    FacultyAPI,
-    facultyServer
-    ) where
+module Server.API.Faculty where
 
 import Servant.Server
 import Servant
@@ -25,7 +22,7 @@ import Control.Monad
 import Server.Error
 import Data.Char
 
-type SearchDescription = Description "Returns faculties for given string"
+type SearchDescription = Description "Возвращает факультет по данному запросу."
 
 type FacultyAPI =
     "search" :> SearchDescription :> ReqBody '[PlainText, JSON] Text :> Post '[JSON] [Faculty]

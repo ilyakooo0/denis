@@ -4,10 +4,7 @@
     FlexibleInstances #-}
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
-module Data.Tags.Completions (
-    CompletionTree(..),
-    mkCompletionTree
-    ) where
+module Data.Tags.Completions where
 
 import qualified Data.Map as M
 import Data.Aeson
@@ -24,6 +21,7 @@ instance ToSample CompletionTree where
     toSamples _ = singleSample . mkCompletionTree $
         ["aa", "aaab", "ba", "b", "bab"]
 
+-- |Объект дерева подсказок тегов.
 data CompletionTree = CompletionTreeNode {
     value :: Maybe String,
     subtree :: M.Map Char CompletionTree
@@ -31,6 +29,7 @@ data CompletionTree = CompletionTreeNode {
 
 instance ToJSON CompletionTree where
 
+-- |Функция, ктороая строит дерево подсказок по данному списку строк.
 mkCompletionTree :: [String] -> CompletionTree
 mkCompletionTree = mkCompletionTree' . map (\ a -> (map toLower a, a)) . sort
     where

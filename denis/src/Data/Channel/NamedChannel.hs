@@ -8,11 +8,7 @@ TypeOperators,
 OverloadedStrings,
 RecordWildCards #-}
 
-module Data.Channel.NamedChannel (
-    NamedChannelId,
-    NamedChannel(..),
-    NamedChannelCreationRequest(..)
-) where
+module Data.Channel.NamedChannel where
 
 import Data.Int (Int64)
 import qualified Generics.SOP as SOP
@@ -44,13 +40,19 @@ instance HasValidatableText (NamedChannelCreationRequest) where
 
 -- MARK: Implementation
 
+-- |Тип -- идентификатор именнованного канала.
 type NamedChannelId = Int64
 
 -- Note: Channel owner only exists in sql
+-- |Структура данных именованного канала.
 data NamedChannel u = NamedChannel {
+    -- |Идентификатор именованного канала.
     namedChannelId :: NamedChannelId,
+    -- |Имя именнованного канала.
     namedChannelName :: Text,
+    -- |Список тегов в именованном канале.
     namedChannelTags :: V.Vector Text,
+    -- |Список идентификаторов пользователей в именованном канале.
     namedChannelPeopleIds :: V.Vector u
 } deriving GHC.Generic
 
@@ -70,9 +72,13 @@ instance (FromJSON u, Ord u) => FromJSON (NamedChannel u) where
 
 -- MARK: NamedChannelCreationRequest
 
+-- |Объект-запрос на создание именованного канала.
 data NamedChannelCreationRequest = NamedChannelCreationRequest {
+    -- |Название канала.
     namedChannelCreationRequestName :: Text,
+    -- |Список тегов в канале.
     namedChannelCreationRequestTags :: V.Vector Text,
+    -- |Список идентификаторов пользователей в канале.
     namedChannelCreationRequestPeopleIds :: V.Vector UserId
 } deriving GHC.Generic
 

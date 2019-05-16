@@ -2,11 +2,7 @@
     OverloadedStrings,
     DeriveGeneric #-}
 
-module Server.Query.Dialog (
-    ChatsResponse(..),
-    responseToDialogs,
-    Dialog(..)
-    ) where
+module Server.Query.Dialog where
 
 import Data.Aeson
 import Data.Message
@@ -25,7 +21,12 @@ instance ToSample Dialog where
     toSamples _ = samples (take 1 (UserDialog <$> [69] <*> map snd (toSamples Proxy)) <>
         (GroupDialog <$> map snd (toSamples Proxy) <*> map snd (toSamples Proxy)))
 
-data Dialog = GroupDialog GroupChat (Maybe Message) | UserDialog UserId Message
+-- |Объект диалога
+data Dialog =
+    -- |Thing
+    GroupDialog GroupChat (Maybe Message) |
+    -- |Also a thing
+    UserDialog UserId Message
     deriving Show
 
 instance ToJSON Dialog where
@@ -42,7 +43,8 @@ instance ToJSON Dialog where
             ]
         ]
 
-data ChatsResponse = ChatsResponse {
+data ChatsResponse =
+    ChatsResponse {
     chatResponseMessageId :: MessageId,
     chatResponseMessageAuthorId :: Maybe UserId,
     chatResponseMessageDestinationGroupId :: Maybe GroupChatId,

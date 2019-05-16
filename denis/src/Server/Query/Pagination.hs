@@ -11,11 +11,7 @@
     UndecidableInstances,
     UndecidableSuperClasses #-}
 
-module Server.Query.Pagination (
-    PaginatingRequest(..),
-    PaginationDirection(..),
-    validatePaginationRequest
-    ) where
+module Server.Query.Pagination where
 
 import GHC.Generics
 import Data.Aeson as A

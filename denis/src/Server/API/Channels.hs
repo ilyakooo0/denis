@@ -7,10 +7,7 @@
     TypeOperators,
     RecordWildCards #-}
 
-module Server.API.Channels (
-    ChannelsApi,
-    channelsApi
-) where
+module Server.API.Channels where
 
 import Servant.API
 import Server.App
@@ -29,20 +26,31 @@ import Control.Monad
 import Data.Limits
 import qualified Data.Text as T
 import Data.Char
+import Control.Monad.Except
 
-type CreateDescription = Description "Creates a new channel\n\nReturns 406 if the channel limit has been exceeded."
+type CreateDescription = Description "Создает канал.\n\nВозвращает 406 если лимит каналов для пользователя был исчерпан."
 
-type SearchDescription = Description "Search for user channels."
+type SearchDescription = Description "Осуществляет поиск по каналам."
+
+type GetDescription = Description "Запрашивает посты в данном канале."
+
+type GetAnonDescription = Description "Запрашивает посты в анонимном канале."
+
+type UpdateDescription = Description "Обновляет именнованный канал."
+
+type DeleteDescription = Description "Удаляет именнованный канал."
+
+type GetAllDescription = Description "Запрашивает все каналы пользователя."
 
 -- MARK: Implementation
 
-type ChannelsApi = Post '[JSON] [NamedChannel UserId] :<|>
-    "get" :> ReqBody '[JSON] (PaginatingRequest P.PostId (Maybe NamedChannelId)) :> Post '[JSON] (ResponseWithUsers [P.Post]) :<|>
-    "getAnonymous" :> ReqBody '[JSON] (PaginatingRequest P.PostId (Maybe AnonymousChannel)) :> Post '[JSON] (ResponseWithUsers [P.Post]) :<|>
+type ChannelsApi = GetAllDescription :> Post '[JSON] [NamedChannel UserId] :<|>
+    "get" :> GetDescription :> ReqBody '[JSON] (PaginatingRequest P.PostId (Maybe NamedChannelId)) :> Post '[JSON] (ResponseWithUsers [P.Post]) :<|>
+    "getAnonymous" :> GetAnonDescription :> ReqBody '[JSON] (PaginatingRequest P.PostId (Maybe AnonymousChannel)) :> Post '[JSON] (ResponseWithUsers [P.Post]) :<|>
     "create" :> CreateDescription :> ReqBody '[JSON] NamedChannelCreationRequest :> Post '[JSON] NamedChannelId :<|>
-    "update" :> ReqBody '[JSON] (NamedChannel UserId) :> PostNoContent '[JSON, FormUrlEncoded, PlainText] NoContent :<|>
-    "delete" :> ReqBody '[JSON] NamedChannelId :> PostNoContent '[JSON, FormUrlEncoded, PlainText] NoContent :<|>
-    "search" :> SearchDescription :> ReqBody '[JSON, PlainText] Text :> Post '[JSON] [NamedChannel UserId]
+    "update" :> UpdateDescription :> ReqBody '[JSON] (NamedChannel UserId) :> PostNoContent '[JSON, FormUrlEncoded, PlainText] NoContent :<|>
+    "delete" :> DeleteDescription :> ReqBody '[JSON] NamedChannelId :> PostNoContent '[JSON, FormUrlEncoded, PlainText] NoContent :<|>
+    "search" :> SearchDescription :> SearchDescription :> ReqBody '[JSON, PlainText] Text :> Post '[JSON] [NamedChannel UserId]
 
 channelsApi :: UserId -> ServerT ChannelsApi App
 channelsApi uId = getChannelsApi uId :<|> getChannel uId :<|> getAnonymousChannelsApi :<|> createChannelApi uId :<|> updateChannelApi uId :<|> deleteChannelApi uId :<|> searchChannelsApi uId

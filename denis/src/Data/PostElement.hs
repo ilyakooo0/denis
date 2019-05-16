@@ -9,15 +9,7 @@
 {-# OPTIONS_GHC -fno-warn-unused-top-binds #-}
 
 
-module Data.PostElement (
-    elemenToRow,
-    rowsToElement,
-    MkElementRow,
-    PostElementRow(..),
-    PostElement(..),
-    elementsToRows,
-    PostQuote(..)
-) where
+module Data.PostElement where
 
 import Data.Int (Int64)
 import qualified Generics.SOP as SOP
@@ -47,10 +39,17 @@ instance HasValidatableText (PostElement p) where
 
 -- MARK: PostElement
 
-data PostElement a = Markdown Text
+-- |Обычный элемент поста.
+data PostElement a
+    -- |Markdown элемент поста.
+    = Markdown Text
+    -- |Latex элемент поста.
     | Latex Text
+    -- |Изорбражение.
     | Image Text
+    -- |Цитата.
     | Quote ()
+    -- |Документ.
     | Attachment Text
     deriving (Show, GHC.Generic)
 
@@ -72,8 +71,10 @@ instance FromJSON (PostElement t) where
 
 -- -- MARK: PostElementRows
 
+-- |Тип отображения из элемента поста с базы данных в другой объект.
 type MkElementRow x = Maybe Text -> Maybe Text -> Maybe Text -> Maybe Int64 -> Maybe Text -> x
 
+-- |Функция, переводящая обычный элемент поста в другой объект.
 elemenToRow :: MkElementRow x -> PostElement p -> x
 elemenToRow f el = case el of
     Markdown m -> f (Just m) Nothing Nothing Nothing Nothing
@@ -83,6 +84,7 @@ elemenToRow f el = case el of
     Quote _ -> f Nothing Nothing Nothing Nothing Nothing
     Attachment a -> f Nothing Nothing Nothing Nothing (Just a)
 
+-- |Отображение элемента поста с базы данных в обычный элемент поста.
 rowsToElement :: MkElementRow (Maybe (PostElement p))
 rowsToElement (Just m) Nothing Nothing Nothing Nothing = Just $ Markdown m
 rowsToElement Nothing (Just l) Nothing Nothing Nothing = Just $ Latex l
@@ -92,37 +94,45 @@ rowsToElement Nothing Nothing (Just i) Nothing Nothing = Just $ Image i
 rowsToElement Nothing Nothing Nothing Nothing (Just a) = Just $ Attachment a
 rowsToElement _ _ _ _ _ = Nothing
 
+-- |Объект поста с базы данных
 data PostElementRow a = PostElementRow {
+    -- |Идентификатор элемента поста
     rowElementId :: Int64,
+    -- |Порядковый номер элемента поста.
     rowElementOrd :: Int64,
+    -- |Markdown элемент.
     rowElementMarkdown :: Maybe Text,
+    -- |LaTeX элемент.
     rowElementLatex :: Maybe Text,
+    -- |Изорбражение.
     rowElementImage :: Maybe Text,
+    -- |Цитата.
     rowElementQuote :: Maybe Int64,
+    -- |Приложение.
     rowElementAttachment :: Maybe Text
 } deriving (GHC.Generic)
 
 instance SOP.Generic (PostElementRow a)
 instance SOP.HasDatatypeInfo (PostElementRow a)
 
-
+-- |Функция, переводящая обычные элементы постоа в их представления для базы данных.
 elementsToRows :: Int64 -> [PostElement a] -> [PostElementRow a]
 elementsToRows pId els = map (\(el, f) -> elemenToRow f el) . zip els . map (PostElementRow pId) $ [0..]
 
 
 -- -- MARK: Quote
 
-data PostQuote = PostQuote {
-    quoteId :: Int64,
-    quoteBody :: [PostElement PostQuote],
-    quotePostId :: Int64
-} deriving (Show, GHC.Generic)
+-- data PostQuote = PostQuote {
+--     quoteId :: Int64,
+--     quoteBody :: [PostElement PostQuote],
+--     quotePostId :: Int64
+-- } deriving (Show, GHC.Generic)
 
-instance ToJSON PostQuote where
-    toJSON (PostQuote qId pb pId) = object [
-        "id" .= qId,
-        "postId" .= pId,
-        "quoteBody" .= pb ]
+-- instance ToJSON PostQuote where
+--     toJSON (PostQuote qId pb pId) = object [
+--         "id" .= qId,
+--         "postId" .= pId,
+--         "quoteBody" .= pb ]
 
 
 -- -- MARK: PostQuoteRow

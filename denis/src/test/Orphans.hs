@@ -71,10 +71,6 @@ instance Arbitrary (PostElement p) where
     arbitrary = genericArbitrary
     shrink = genericShrink
 
-instance Arbitrary PostQuote where
-    arbitrary = genericArbitrary
-    shrink = genericShrink
-
 instance Arbitrary AnonymousChannel where
     arbitrary = genericArbitrary
     shrink = genericShrink

@@ -11,13 +11,7 @@
     DeriveAnyClass,
     RecordWildCards #-}
 
-module Server.Auth.HTML (
-    HTML,
-    genActivationPage,
-    Markup,
-    errorPage,
-    page
-    ) where
+module Server.Auth.HTML where
 
 import Servant.HTML.Blaze
 import Text.Blaze.Html5 as H

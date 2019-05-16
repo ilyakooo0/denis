@@ -3,11 +3,7 @@
     TypeOperators,
     DataKinds #-}
 
-module Server.Server (
-    runServer,
-    hoistedServer,
-    getConfig
-) where
+module Server.Server where
 
 import Server.API
 import Server.Auth

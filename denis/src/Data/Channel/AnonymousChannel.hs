@@ -8,9 +8,7 @@
     OverloadedStrings,
     RecordWildCards #-}
 
-module Data.Channel.AnonymousChannel (
-    AnonymousChannel(..)
-) where
+module Data.Channel.AnonymousChannel where
 
 import qualified Generics.SOP as SOP
 import qualified GHC.Generics as GHC
@@ -34,8 +32,11 @@ instance HasValidatableText AnonymousChannel where
 
 -- MARK: Implementation
 
+-- |Анонимные канал -- канал, который не хрнится на сервере.
 data AnonymousChannel = AnonymousChannel {
+    -- |Список тегов в канале
     anonymousChannelTags :: V.Vector Text,
+    -- |Список людей в анонимном канале
     anonymousChannelPeopleIds :: [UserId]
 } deriving GHC.Generic
 

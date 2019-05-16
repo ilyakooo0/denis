@@ -12,15 +12,7 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 
-module Data.GroupChat (
-    GroupChat(..),
-    GroupChatPermissions(..),
-    GroupChatId,
-    UserPermissions,
-    GroupChatCreation(..),
-    maxChatPermissions,
-    minChatPermissions
-    ) where
+module Data.GroupChat where
 
 import Data.Aeson
 import Data.Int (Int64)
@@ -56,12 +48,18 @@ instance HasValidatableText GroupChatCreation where
 instance ToSample UserPermissions where
     toSamples _ = singleSample $ M.fromList [(69, GroupChatPermissions True), (5051, GroupChatPermissions False)]
 
+-- |Идентификатор групповой беседы.
 type GroupChatId = Int64
+-- |Права участников групповой беседы.
 type UserPermissions = M.Map UserId GroupChatPermissions
 
+-- |Объект групповой беседы.
 data GroupChat = GroupChat {
+    -- |Идентификатор групповой беседы.
     groupChatId :: GroupChatId,
+    -- |Права участников беседы.
     groupChatUsers :: Jsonb UserPermissions,
+    -- |Имя групповой беседы.
     groupChatName :: Text
 } deriving (Show, GHC.Generic)
 
@@ -78,14 +76,18 @@ instance FromJSON GroupChat where
     parseJSON = withObject "group chat" $ \e ->
         GroupChat <$> e .: "id" <*> (Jsonb <$> e .: "users") <*> e .: "name"
 
+-- |Права участника беседы
 data GroupChatPermissions = GroupChatPermissions {
     -- canInvite :: Bool,
     -- canKick :: Bool,
+    -- |Является ли данный участник администратором
     isAdmin :: Bool
 } deriving (Show, GHC.Generic)
 
+-- |Максимально возможные права в групповой беседе.
 maxChatPermissions :: GroupChatPermissions
 maxChatPermissions = GroupChatPermissions True -- True True
+-- |Минимально возможные права в групповой беседе.
 minChatPermissions :: GroupChatPermissions
 minChatPermissions = GroupChatPermissions False
 
@@ -100,6 +102,7 @@ instance SOP.HasDatatypeInfo GroupChatPermissions
 instance ToJSON GroupChatPermissions
 instance FromJSON GroupChatPermissions
 
+-- |Объект для создания групповой беседы
 data GroupChatCreation = GroupChatCreation {
     groupChatCreationUsers :: Jsonb UserPermissions,
     groupChatCreationName :: Text

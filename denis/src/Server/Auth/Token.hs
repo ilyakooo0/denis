@@ -9,15 +9,7 @@
     TypeOperators,
     DeriveAnyClass #-}
 
-module Server.Auth.Token (
-    Token(..),
-    generateToken,
-    TokenVerificationCode,
-    generateTokenM,
-    hashVerificationCode,
-    GeneratedToken(..),
-    hash
-    ) where
+module Server.Auth.Token where
 
 import Data.Time.Clock
 import Data.ByteString

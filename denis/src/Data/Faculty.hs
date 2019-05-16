@@ -8,10 +8,7 @@
     OverloadedStrings,
     DeriveAnyClass #-}
 
-module Data.Faculty (
-    Faculty(..),
-    FacultyUrl
-    ) where
+module Data.Faculty where
 
 import qualified Generics.SOP as SOP
 import qualified GHC.Generics as GHC
@@ -24,15 +21,24 @@ instance ToSample Faculty where
     toSamples _ = singleSample $ Faculty "ПИ" "cs.hse.ru/bse" "ФКН -> ПИ" "Москва" "193729"
         (V.fromList ["Программирование", "Естсественные науки"]) "Настоящий адрес факультета"
 
+-- |Адрес сайта департамента
 type FacultyUrl = T.Text
 
+-- |Объект департамента
 data Faculty = Faculty {
+    -- |Название департамента
     facultyName :: T.Text,
+    -- |Адрес сайта департамента
     facultyUrl :: FacultyUrl,
+    -- |Вспомогательный текст дапартамента с сайта
     facultyPath :: T.Text,
+    -- |Название кампуса
     facultyCampusName :: T.Text,
+    -- |Код кампуса департамента
     facultyCampusCode :: T.Text,
+    -- |Теги департамента
     facultyTags :: V.Vector T.Text,
+    -- |Адрес департамента
     facultyAddress :: T.Text
 } deriving (GHC.Generic, Show, SOP.Generic, SOP.HasDatatypeInfo)
 

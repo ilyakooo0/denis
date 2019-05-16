@@ -15,59 +15,7 @@
 {-# OPTIONS_GHC -Wno-partial-type-signatures #-}
 
 
-module Data.Query (
-    Schema,
-    createTables,
-    getPosts,
-    -- getUser,
-    getUsers,
-    getAllUsers,
-    getLastPosts,
-    getPostsForUser,
-    Limit,
-    publishPost,
-    getChannelPosts,
-    updateChannel,
-    createNewChannel,
-    getAllChannels,
-    getAnonymousChannelPosts,
-    deleteNamedChannel,
-    HasUsers(..),
-    wrapIntoUsers,
-    ResponseWithUsers(..),
-    getTags,
-    getDialogs,
-    getMessagesInUserChat,
-    getMessagesInGroupChat,
-    sendMessage,
-    createGroupChat,
-    updateGroupChat,
-    leaveGroupChat,
-    getGroupChatForUser,
-    getFaculty,
-    updateFaculty,
-    getFacultyFromQuery,
-    getUserWithEmail,
-    createToken,
-    validateToken,
-    invalidateToken,
-    tryVerifyToken,
-    getVerifiedToken,
-    UserCreation(..),
-    createUser,
-    tryActivateToken,
-    deactivateToken,
-    searchUsers,
-    searchTags,
-    updateUser,
-    UserUpdateRow(..),
-    killAllTokens,
-    channelCountForUser,
-    pruneAuth,
-    searchChannels,
-    isValidFaculty,
-    groupChatIsValidForUser
-    ) where
+module Data.Query where
 
 import Squeal.PostgreSQL
 import Data.User
@@ -110,6 +58,9 @@ import qualified Data.Vector as V
 import Server.Auth.Token
 import Server.Error
 import Data.Text.Validator
+import Control.Monad.Except
+import Control.Monad.IO.Class
+import Crypto.Hash.SHA512 (hash)
 
 -- MARK: Documentation
 
@@ -122,14 +73,17 @@ instance (ToSample r) => ToSample (ResponseWithUsers r) where
 type TableEndo schema params from grouping = TableExpression schema params from grouping ->
     TableExpression schema params from grouping
 
+-- |Функция, возвращаяющая запрос на посты, прменяя к нему данный ндоморфизм.
 postsQ :: TableEndo Schema params _ 'Ungrouped -> Query Schema params _
 postsQ te = selectStar $ te (from $ table #posts)
 
+-- |Функция, возвращающая посты
 postViewT :: TableEndo Schema params _ 'Ungrouped -> TableExpression Schema params _ 'Ungrouped
 postViewT te = from $ subquery (postsQ te `As` #posts) &
     innerJoin (table #postElements)
     (#posts ! #postRowId .== #postElements ! #rowElementId)
 
+-- |Функция, возвращающая запрос на поста, примення два промежуточных эндоморфизма к таблице.
 getPostQ
     :: TableEndo Schema params _ 'Ungrouped
     -- ^ PostRowResponse endo
@@ -172,6 +126,7 @@ getPostQ oTe te = select (
 --     let rows = M.fromList $ map (tupleBy $ quoteRowId . head) . groupBy ((==) `on` quoteRowId) . sortBy (compare `on` quoteRowId) $ rows'
 --     return $ M.lookup qId rows >>= rowsToQuote rows
 
+-- |Запрос, возвращающий пользователя по адресу почты.
 getUserWithEmailQ :: Query Schema (TuplePG (Only UserEmail)) (RowPG (User FacultyUrl))
 getUserWithEmailQ = select (
     #userRowId `as` #userId :*
@@ -184,6 +139,7 @@ getUserWithEmailQ = select (
     where_ (#userRowEmail .== param @1) &
     where_ (notNull #userRowIsValidated))
 
+-- |Запрос, возвращающий подтвержденных пользователей.
 verifiedUserIdsQ :: [UserId] -> Maybe (Query Schema '[] (RowPG (Only UserId)))
 verifiedUserIdsQ uIds = case idsToColumn uIds of
     Just idQ -> Just $ select (#users ! #userRowId `as` #fromOnly) $ from (subquery (idQ `As` #ids) &
@@ -191,6 +147,7 @@ verifiedUserIdsQ uIds = case idsToColumn uIds of
             (#ids ! #id .== #users ! #userRowId))
     Nothing -> Nothing
 
+-- |Запрос, возвращающий пользователей с данными идентификаторами.
 getUsersQ :: [UserId] -> Maybe (Query Schema '[] (RowPG UserRow))
 getUsersQ uIds = case idsToColumn uIds of
     Just idQ -> Just $ select (
@@ -216,6 +173,7 @@ getUsersQ uIds = case idsToColumn uIds of
             where_ (notNull $ #users ! #userRowIsValidated))
     Nothing -> Nothing
 
+-- |Запорс, возвращающий всех пользователей.
 getAllUsersQ :: Query Schema '[] (RowPG UserRow)
 getAllUsersQ = select (
             #users ! #userRowId :*
@@ -237,6 +195,7 @@ getAllUsersQ = select (
             (#users ! #userRowFacultyUrl .== #faculties ! #facultyUrl))&
             where_ (notNull $ #users ! #userRowIsValidated))
 
+-- |Запрос, возвращающий все посты по идентификатору.
 getPostsByIdQ :: [PostId] -> Maybe (Query Schema '[] (RowPG PostRowResponse))
 getPostsByIdQ pIds = case idsToColumn pIds of
     Just idQ -> Just $ selectDotStar #posts $ from (subquery (idQ `As` #ids) &
@@ -245,14 +204,17 @@ getPostsByIdQ pIds = case idsToColumn pIds of
             (#ids ! #id .== #posts ! #postRowId))
     Nothing -> Nothing
 
+-- |Ограничение
 type Limit = Word64
 
+-- |SQL оператор IS NOT FALSE
 isNotFalse
   :: Expression schema from grouping params ('Null ty)
   -- ^ possibly @NULL@
   -> Condition schema from grouping params
 isNotFalse x = UnsafeExpression $ renderExpression x <+> "IS NOT FALSE"
 
+-- |Запрос, возвращающий последние посты.
 getLastPostsQ
     :: TableEndo _ _ _ _
     -> Limit
@@ -267,12 +229,14 @@ getLastPostsQ te lim dir = getPostQ
     where
         ((.^), order) = directionToOperator dir
 
+-- |Запрос, возвращающий последние посты для данного пользователя.
 getLastNPostsForUserQ
     :: Limit
     -> P.PaginationDirection
     -> Query Schema (TuplePG (Maybe PostId, UserId)) (RowPG PostRowResponse)
 getLastNPostsForUserQ = getLastPostsQ $ where_ (#posts ! #postRowAuthorId .== param @2)
 
+-- |Запрос на создание поста.
 createPostRowQ :: Manipulation Schema (TuplePG (UserId, Vector Text)) (RowPG (Only PostId))
 createPostRowQ = insertRow #posts
     (Default `as` #postRowId :*
@@ -282,6 +246,7 @@ createPostRowQ = insertRow #posts
     OnConflictDoRaise
     (Returning $ #postRowId `as` #fromOnly)
 
+-- |Запрос на создание элементов постов.
 createPostElementRowsQ :: Manipulation Schema (TuplePG (PostElementRow Post)) '[]
 createPostElementRowsQ = insertRow_ #postElements
     (Set (param @1) `as` #rowElementId :*
@@ -292,11 +257,13 @@ createPostElementRowsQ = insertRow_ #postElements
     Set (param @6) `as` #rowElementQuote :*
     Set (param @7) `as` #rowElementAttachment)
 
+-- |Запрос, возвращающий канал для данного пользователя.
 getChannelForUserQ :: Query Schema (TuplePG (UserId, NamedChannelId)) (RowPG NamedChannelFull)
 getChannelForUserQ = selectStar $
     from (table #channels) &
     where_ (#namedChannelFullOwner .== param @1 .&& #namedChannelFullId .== param @2)
 
+-- |Запрос, обновляющий данные о пользователе.
 updateUserQ :: Manipulation Schema (TuplePG (UserUpdateRow)) (RowPG (Only UserId))
 updateUserQ = update #users (
     Same `as` #userRowId :*
@@ -309,12 +276,14 @@ updateUserQ = update #users (
     (#userRowId .== param @1)
     (Returning $ #userRowId `as` #fromOnly)
 
+-- |Запрос, возвращающий каналы пользователя.
 getAllChannelsForUserQ :: Query Schema (TuplePG (Only UserId)) (RowPG NamedChannelFull)
 getAllChannelsForUserQ = selectStar $
     from (table #channels) &
     where_ (#namedChannelFullOwner .== param @1) &
     orderBy [#namedChannelFullId & Desc]
 
+-- |Запрос, осуществляющий поиск по каналам данного пользователя.
 searchChannelsForUserQ :: Query Schema (TuplePG (UserId, Text)) (RowPG NamedChannelFull)
 searchChannelsForUserQ = selectStar $
     from (table #channels) &
@@ -331,6 +300,7 @@ searchChannelsForUserQ = selectStar $
         vector1 = tsVector' #namedChannelFullName
         query = tsQuery' (param @2)
 
+-- |Запрос, обновляющий факультет.
 updateFacultyQ :: Manipulation Schema (TuplePG Faculty) '[]
 updateFacultyQ = insertRow #faculties
     (
@@ -345,10 +315,12 @@ updateFacultyQ = insertRow #faculties
     (OnConflictDoNothing)
     (Returning Nil)
 
+-- |Запрос, возвращающий факультет.
 getFacultyQ :: Query Schema (TuplePG (Only Text)) (RowPG Faculty)
 getFacultyQ = selectStar (from (table #faculties) &
         where_ (#facultyUrl .== param @1))
 
+-- |Запрос на создание нового именованного канала.
 createNamedChannelQ :: Manipulation Schema (TuplePG NamedChannelCreation) (RowPG (Only NamedChannelId))
 createNamedChannelQ = insertRow #channels
     (
@@ -361,14 +333,17 @@ createNamedChannelQ = insertRow #channels
     OnConflictDoRaise
     (Returning $ #namedChannelFullId `as` #fromOnly)
 
+-- |Запрос, возвращающий количество каналов у данного пользователя.
 countChannelsQ :: Query Schema (TuplePG (Only UserId)) (RowPG (Only Int64))
 countChannelsQ = select (countStar `as` #fromOnly) (from (table #channels) &
     where_ (#namedChannelFullOwner .== param @1) &
     groupBy #namedChannelFullOwner)
 
+-- |Запрос, удаляющий канал у данного пользователя.
 deleteNamedChannelQ :: Manipulation Schema (TuplePG (Only NamedChannelId)) '[]
 deleteNamedChannelQ = deleteFrom_ #channels (#namedChannelFullId .== param @1)
 
+-- |Запрос, обновляющий именованный канал.
 updateNamedChannelQ :: Manipulation Schema (TuplePG NamedChannelFull) '[]
 updateNamedChannelQ = update_ #channels
     (
@@ -380,6 +355,7 @@ updateNamedChannelQ = update_ #channels
     )
     (#namedChannelFullOwner .== param @2 .&& #namedChannelFullId .== param @1)
 
+-- |Запрос на каналы пользователя.
 getChannelPostsQ
     :: Limit
     -> P.PaginationDirection
@@ -398,10 +374,12 @@ getChannelPostsQ lim dir uIds tags = getLastPostsQ
             Just uIdsQ -> (`in_` uIdsQ)
             Nothing -> const $ false
 
+-- |Запрос на все хэштеги.
 getTagsQ :: Query Schema params (RowPG (Only String))
 getTagsQ = selectDistinct (unsafeFunction "unnest" #postRowTags `as` #fromOnly) $
     from (table #posts)
 
+-- |Запорс на создание сообщения.
 createMessageQ :: Manipulation
     Schema
     (TuplePG (UserId, Maybe GroupChatId, Maybe UserId, Jsonb (PostElement (MessageCreation))))
@@ -418,6 +396,7 @@ createMessageQ = insertRow #messages
     OnConflictDoRaise
     (Returning $ #messageStorageId `as` #fromOnly)
 
+-- |Запрос на создание фантомного сообщения.
 createPhantomMessageQ :: Manipulation Schema (TuplePG (Only GroupChatId)) '[]
 createPhantomMessageQ = insertRow_ #messages
     (
@@ -429,6 +408,7 @@ createPhantomMessageQ = insertRow_ #messages
         Set currentTimestamp `as` #messageStorageTime
     )
 
+-- |Запрос на создание групповой беседы.
 createGroupChatQ :: Manipulation Schema (TuplePG GroupChatCreation) (RowPG (Only GroupChatId))
 createGroupChatQ = insertRow #groupChats
     (
@@ -439,6 +419,7 @@ createGroupChatQ = insertRow #groupChats
     OnConflictDoRaise
     (Returning $ #groupChatId `as` #fromOnly)
 
+-- |Запрос на обновление групповой беседы.
 updateGroupChatQ :: Manipulation Schema (TuplePG GroupChat) '[]
 updateGroupChatQ = update_ #groupChats
     (
@@ -448,23 +429,27 @@ updateGroupChatQ = update_ #groupChats
     )
     (#groupChatId .== param @1)
 
+-- |Тип строки, воозвращаемой в промежуточном запросе на все диалоги.
 type ChatsQueryResponse = '[
     "messageId" ::: 'NotNull (PG UserId),
     "messageGroupId" ::: 'Null (PG UserId),
     "messageUserId" ::: 'Null (PG UserId)
     ]
 
+-- |Тип оператора сравнения.
 type ConditionOp schema from grouping params nullity0 nullity1 (ty :: PGType)
     = Expression schema from grouping params (nullity0 ty)
     -> Expression schema from grouping params (nullity1 ty)
     -> Condition schema from grouping params
 
+-- |Тип параметров на запрос диалогов.
 type ChatQueryParams = TuplePG
     ( UserId
     , Maybe String -- Just UserId as String
     , Maybe MessageId
     )
 
+-- |Запрос на все диалоги.
 getChatsQ
     :: Limit
     -> P.PaginationDirection
@@ -525,6 +510,7 @@ getChatsQ lim dir = select (
                     where_ (isNotNull #messageStorageDestinationGroupId) &
                     groupBy #messageStorageDestinationGroupId
 
+-- |Запрос на сообщения.
 getMessagesQ
     :: Limit
     -> P.PaginationDirection
@@ -544,6 +530,7 @@ getMessagesQ lim dir = selectStar (from (table #messages) &
     where
         ((.^), order) = directionToOperator dir
 
+-- |Запрос на сообщения в групповой беседе.
 getGroupMessagesQ
     :: Limit
     -> P.PaginationDirection
@@ -562,12 +549,14 @@ getGroupMessagesQ lim dir = selectStar (from (table #messages) &
         ((.^), order) = directionToOperator dir
 
 -- String -- user id as String
+-- |Запрос на групповую беседу для данного пользователя.
 getGroupChatForUserQ :: Query Schema (TuplePG (String, GroupChatId)) (RowPG GroupChat)
 getGroupChatForUserQ = selectStar $
     (from (table #groupChats)) &
     where_ (#groupChatId .== param @2) &
     where_ (#groupChatUsers .? param @1)
 
+-- |Запрос на поиск факультета.
 getFacultySearchResultQ :: Query Schema (TuplePG (Only Text)) (RowPG Faculty)
 getFacultySearchResultQ = selectStar (from (table #faculties) &
     where_ (vector @@ query) &
@@ -588,6 +577,7 @@ getFacultySearchResultQ = selectStar (from (table #faculties) &
             #facultyPath])
         query = tsQuery "russian" (param @1)
 
+-- |Запрос на поиск пользователя.
 searchUsersQ :: Query Schema (TuplePG (Only Text)) (RowPG UserRow)
 searchUsersQ = select (
             #users ! #userRowId :*
@@ -619,19 +609,21 @@ searchUsersQ = select (
             ])
         query = tsQuery' (param @1)
 
+-- |Запрос на теги по популярности.
 tagsByFrquencyQ :: Query Schema params '["tag" ::: 'NotNull (PG Text), "count" ::: 'NotNull 'PGint8]
 tagsByFrquencyQ = select
             (#fromOnly `as` #tag :* count #fromOnly `as` #count)
             (from (subquery $ getTagsQ `As` #tt) &
             groupBy #fromOnly)
 
+-- |Запрос на данной количество самых популярных тегов.
 getNpopularTagsQ :: Limit -> Query Schema param (RowPG (Only Text))
 getNpopularTagsQ lim = select (#tag `as` #fromOnly)
     (from (subquery $ tagsByFrquencyQ `As` #tt) &
         orderBy [#count & Desc] &
         limit lim)
 
-
+-- |Запрос на поиск по тегам.
 searchTagsQ :: Query Schema (TuplePG (Only Text)) (RowPG (Only Text))
 searchTagsQ = select (#tag `as` #fromOnly) $
     from (subquery (tagsByFrquencyQ `As` #tt)) &
@@ -642,6 +634,7 @@ searchTagsQ = select (#tag `as` #fromOnly) $
         query = tsQuery' (param @1)
         vector = tsVector' #tag
 
+-- |PostgreSQL функция ts_rank_cd
 tsRankCd
     :: Expression schema from grouping params ('NotNull 'PGtext)
     -> Expression schema from grouping params ('NotNull 'PGtext)
@@ -649,6 +642,7 @@ tsRankCd
 tsRankCd vector query = UnsafeExpression $
     "ts_rank_cd" <> parenthesized (commaSeparated ["ARRAY[1,1,1,1]", renderExpression vector, renderExpression query, "2|4|8|16|32"])
 
+-- |PostgreSQL функция ts_vector
 tsVector
     :: ByteString -- ^ Language
     -> Expression schema from grouping params ('NotNull 'PGtext)
@@ -656,12 +650,14 @@ tsVector
 tsVector lang x = UnsafeExpression $
     "to_tsvector" <> parenthesized (commaSeparated  [singleQuotedUtf8 lang, renderExpression x])
 
+-- |PostgreSQL функция ts_vector без языка.
 tsVector'
     :: Expression schema from grouping params ('NotNull 'PGtext)
     -> Expression schema from grouping params ('NotNull 'PGtext)
 tsVector' x = UnsafeExpression $
     "to_tsvector" <> parenthesized (renderExpression x)
 
+-- |PostgreSQL функция ts_query.
 tsQuery
     :: ByteString -- ^ Language
     -> Expression schema from grouping params ('NotNull 'PGtext)
@@ -669,32 +665,38 @@ tsQuery
 tsQuery lang x = UnsafeExpression $
     "to_tsquery" <> parenthesized (commaSeparated  [singleQuotedUtf8 lang, renderExpression x])
 
+-- |PostgreSQL функция ts_query без языка.
 tsQuery'
     :: Expression schema from grouping params ('NotNull 'PGtext)
     -> Expression schema from grouping params ('NotNull 'PGtext)
 tsQuery' x = UnsafeExpression $
     "to_tsquery" <> parenthesized (renderExpression x)
 
+-- |PostgreSQL функция array_to_string
 arrayToText
     :: Expression schema from grouping params ('NotNull  ('PGvararray ('NotNull 'PGtext)))
     -> Expression schema from grouping params ('NotNull  'PGtext)
 arrayToText x = UnsafeExpression $
     "array_to_string" <> parenthesized (commaSeparated  [renderExpression x, "' '"])
 
+-- |PostgreSQL оператор @@
 (@@)
     :: Expression schema from grouping params (nullity0  'PGtext)
     -> Expression schema from grouping params (nullity1  'PGtext)
     -> Expression schema from grouping params (nullity2  'PGbool)
 (@@) = unsafeBinaryOp "@@"
 
+-- |Пробел.
 space :: Expression schema from grouping params ('NotNull  'PGtext)
 space = UnsafeExpression "' '"
 
+-- |Функция, переводящая список варажений текста в одно выражение текста через пробел.
 textArrayToText
     :: [Expression schema from grouping params ('NotNull  'PGtext)]
     -> Expression schema from grouping params ('NotNull  'PGtext)
 textArrayToText = fold . L.intersperse space
 
+-- |Запрос, создающий пользователя.
 createUserQ :: Manipulation Schema (TuplePG UserCreation) (RowPG (Only UserId))
 createUserQ = insertRow #users (
     Default `as` #userRowId :*
@@ -707,12 +709,13 @@ createUserQ = insertRow #users (
     OnConflictDoRaise
     (Returning (#userRowId `as` #fromOnly))
 
+-- |Запрос, удалющий пользователей, которые не подтвердили свой профиль.
 removeUnverifiedUserQ :: Manipulation Schema (TuplePG (Only UserEmail)) '[]
 removeUnverifiedUserQ = deleteFrom_ #users
     (#userRowEmail .== param @1 .&&
         (not_ . notNull $ #userRowIsValidated))
 
-
+-- |Запрос, создающий токен.
 createTokenQ :: Manipulation Schema (TuplePG Token) '[]
 createTokenQ = insertRow_ #tokens (
         Set (param @1) `as` #tokenUserId :*
@@ -725,6 +728,7 @@ createTokenQ = insertRow_ #tokens (
         Set (param @8) `as` #tokenDeactivationCode
     )
 
+-- |Запрос, обновляющий токен.
 updateTokenQ :: Manipulation Schema (TuplePG Token) '[]
 updateTokenQ = update_ #tokens (
         Same `as` #tokenUserId :*
@@ -737,10 +741,12 @@ updateTokenQ = update_ #tokens (
         Set (param @8) `as` #tokenDeactivationCode)
     (#tokenUserId .== param @1 .&& #tokenValue .== param @2)
 
+-- |Запрос, удалющий токен.
 deleteTokenQ :: Manipulation Schema (TuplePG (UserId, ByteString)) '[]
 deleteTokenQ = deleteFrom_ #tokens
     (#tokenUserId .== param @1 .&& #tokenValue .== param @2)
 
+-- |Запрос, подтверждающий профиль пользователя.
 validateUserQ :: Manipulation Schema (TuplePG (Only UserId)) '[]
 validateUserQ = update_ #users (
     Same `as` #userRowId :*
@@ -752,22 +758,26 @@ validateUserQ = update_ #users (
     Set true `as` #userRowIsValidated)
     (#userRowId .== param @1)
 
+-- |Запрос, возвращающий токен.
 getTokenQ :: Query Schema (TuplePG (UserId, ByteString)) (RowPG Token)
 getTokenQ = selectStar (from (table #tokens) &
     where_ (#tokenUserId .== param @1 .&&
         #tokenValue .== param @2))
 
+-- |Запрос, возвращающий токен по хэшу кода активации.
 getTokenActivationQ :: Query Schema (TuplePG (UserId, ByteString)) (RowPG Token)
 getTokenActivationQ = selectStar (from (table #tokens) &
     where_ (#tokenUserId .== param @1 .&&
         #tokenActivationCode .== param @2))
 
+-- |Запрос, даективирующий токен.
 deactivateTokenQ :: Manipulation Schema (TuplePG (UserId, ByteString)) (RowPG (Only Text))
 deactivateTokenQ = deleteFrom #tokens
     (#tokenUserId .== param @1 .&&
         #tokenDeactivationCode .== param @2)
     (Returning (#tokenUserAgent `as` #fromOnly))
 
+-- |Запрос, возвращающий подтвержденный токен.
 getVerifiedTokenQ :: Query Schema (TuplePG (UserId, ByteString)) (RowPG Token)
 getVerifiedTokenQ = selectStar (from (table #tokens) &
     where_ (#tokenUserId .== param @1 .&&
@@ -775,14 +785,17 @@ getVerifiedTokenQ = selectStar (from (table #tokens) &
         isNull #tokenVerificationCode .&&
         currentTimestamp .< #tokenExpiryDate))
 
+-- |Запрос, даективирующий все токены для данного пользователя.
 killAllTokensQ :: Manipulation Schema (TuplePG (Only UserId)) '[]
 killAllTokensQ = deleteFrom_ #tokens
     (#tokenUserId .== param @1)
 
+-- |Запрос, удаляющий недействительные токены.
 pruneDeadTokensQ :: Manipulation Schema '[] '[]
 pruneDeadTokensQ = deleteFrom_ #tokens
     (#tokenExpiryDate .< currentTimestamp)
 
+-- |Запрос, удаляющий неактивированных пользователей.
 pruneGhostUsersQ :: Manipulation Schema '[] '[]
 pruneGhostUsersQ = deleteFrom_ #users
     ((not_ . in_ #userRowId $ select (#tokens ! #tokenUserId `as` #id) (from $ table #tokens)) .&&
@@ -798,11 +811,17 @@ instance HasValidatableText UserCreation where
         userCreationUserFaculty,
         userCreationUserEmail]
 
+-- |Объект для создания пользователя.
 data UserCreation = UserCreation {
+    -- |Имя.
     userCreationFirstName :: Text,
+    -- |Отчество.
     userCreationMiddleName :: Text,
+    -- |Фамилия.
     userCreationLastName :: Text,
+    -- |Факультет.
     userCreationUserFaculty :: FacultyUrl,
+    -- |Адрес почты.
     userCreationUserEmail :: Text
 } deriving (GHC.Generic, SOP.Generic, SOP.HasDatatypeInfo)
 
@@ -819,42 +838,62 @@ instance FromJSON UserCreation where
     parseJSON = withObject "user creation" $ \e ->
         UserCreation <$> e .: "firstName" <*> e .: "middleName" <*> e .: "lastName" <*> e .: "faculty" <*> e .: "email"
 
+-- |Объект для обновления пользователя.
 data UserUpdateRow = UserUpdateRow {
+    -- |Идентификатор пользователя.
     userUpdateRowId :: UserId,
+    -- |Имя.
     userUpdateRowFirstName :: Text,
+    -- |Отчество.
     userUpdateRowMiddleName :: Text,
+    -- |Фамилия.
     userUpdateRowLastName :: Text,
+    -- |Факультет.
     userUpdateRowUserFaculty :: FacultyUrl
 } deriving (GHC.Generic, SOP.Generic, SOP.HasDatatypeInfo)
 
-
+-- |Объект для создания канала.
 data NamedChannelCreation = NamedChannelCreation {
+    -- |Владелец канала.
     namedChannelCreationOwner :: UserId,
+    -- |Название канала.
     namedChannelCreationName :: Text,
+    -- |Теги в канале.
     namedChannelCreationTags :: Vector Text,
+    -- |Люди в канале.
     namedChannelCreationPeopleIds :: Vector UserId
 } deriving (GHC.Generic, SOP.Generic, SOP.HasDatatypeInfo)
 
+-- |Функция, добавлющая в структуру пользователя.
 addUserToChannelCreate :: UserId -> NamedChannelCreationRequest -> NamedChannelCreation
 addUserToChannelCreate uId (NamedChannelCreationRequest cName cTags cPeople) = NamedChannelCreation uId cName cTags cPeople
 
+-- |Полный объект канала.
 data NamedChannelFull = NamedChannelFull {
+    -- |Идентификатор.
     namedChannelFullId :: NamedChannelId,
+    -- |Владелец.
     namedChannelFullOwner :: UserId,
+    -- |Название.
     namedChannelFullName :: Text,
+    -- |Теги.
     namedChannelFullTags :: Vector Text,
+    -- |пользователи.
     namedChannelFullPeopleIds :: Vector UserId
 } deriving GHC.Generic
 
 instance SOP.Generic NamedChannelFull
 instance SOP.HasDatatypeInfo NamedChannelFull
 
+-- |Добавляет в структуру пользователя.
 addUserToChannelUpdate :: UserId -> NamedChannel UserId -> NamedChannelFull
 addUserToChannelUpdate uId (NamedChannel cId cName cTags cPeople) = NamedChannelFull cId uId cName cTags cPeople
 
+-- |Убирает пользователя из структуры.
 removeUserFromChannel :: NamedChannelFull -> NamedChannel UserId
 removeUserFromChannel (NamedChannelFull cId _ cName cTags cPeople) = NamedChannel cId cName cTags cPeople
 
+-- |Возвращаает канал для данного человека.
 getChannelForUser :: UserId -> NamedChannelId -> StaticPQ NamedChannelFull
 getChannelForUser uId cId = do
     channel <- runQueryParams getChannelForUserQ (uId, cId) >>= firstRow
@@ -862,7 +901,7 @@ getChannelForUser uId cId = do
         (Just c) -> return c
         Nothing -> lift $ S.throwError S.err404
 
--- TODO: Reject bad requests. Should be binary.
+-- |Проверяет, существует ли пользователь.
 verifyUsers :: [UserId] -> StaticPQ ()
 verifyUsers uIds =
     case verifiedUserIdsQ uIds of
@@ -871,6 +910,7 @@ verifyUsers uIds =
             when (length us /= length uIds) $ lift $ S.throwError impossibleContent
         Nothing -> return ()
 
+-- |Удаляет групповую беседу.
 deleteGroupChat :: GroupChatId -> StaticPQ ()
 deleteGroupChat gId = do
     _ <- manipulateParams deleteGroupChatQ (Only gId)
@@ -885,6 +925,7 @@ deleteGroupChat gId = do
             (#messageStorageDestinationGroupId .== param @1)
 
 -- NOTE: Not transactional
+-- |Создает пользователя.
 createUser :: UserCreation -> StaticPQ UserId
 createUser creation = do
     _ <- manipulateParams removeUnverifiedUserQ (Only $ userCreationUserEmail creation)
@@ -894,6 +935,7 @@ createUser creation = do
 -- MARK: FrontEnd functions
 
 -- Nothing <=> no user
+-- |Возвращаает посты от данного пользователя.
 getPostsForUser
     :: Maybe PostId
     -> Limit
@@ -904,6 +946,7 @@ getPostsForUser pId lim dir uId = do
     postRows <- runQueryParams (getLastNPostsForUserQ lim dir) (pId, uId) >>= getRows
     wrapIntoResponse (fromMaybe [] . rowsToPosts $ postRows)
 
+-- |Возвращаает посты по идентификатором.
 getPosts :: [PostId] -> StaticPQ (Maybe (ResponseWithUsers [Post]))
 getPosts pId =
     case getPostsByIdQ pId of
@@ -912,6 +955,7 @@ getPosts pId =
             rowsToPosts postRows `liftMaybe` wrapIntoResponse
         Nothing -> return Nothing
 
+-- |Возвращает последние посты.
 getLastPosts
     :: Maybe PostId
     -> Limit
@@ -921,15 +965,19 @@ getLastPosts pId lim dir = do
     postRows <- runQueryParams (getLastPostsQ id lim dir) (Only pId) >>= getRows
     rowsToPosts postRows `liftMaybe` wrapIntoResponse
 
+-- |Возвращает пользователя по адресу почты.
 getUserWithEmail :: UserEmail -> StaticPQ (Maybe (User FacultyUrl))
 getUserWithEmail email = runQueryParams getUserWithEmailQ (Only email) >>= firstRow
 
+-- |возвращает пользователей по идентификаторам.
 getUsers :: [UserId] -> StaticPQ (Maybe [User Faculty])
 getUsers ids = getUsersQ ids `liftMaybe` (fmap (Just . map rowToUser) . (runQuery >=> getRows))
 
+-- |Возвращает всех пользователей.
 getAllUsers :: StaticPQ [User Faculty]
 getAllUsers = fmap rowToUser <$> (runQuery getAllUsersQ >>= getRows)
 
+-- |Публичует пост.
 publishPost :: UserId -> PostCreation -> StaticPQ PostId
 publishPost uId pc = commitedTransactionallyUpdate $ do
     pId' <- manipulateParams createPostRowQ (uId, postCreationTags pc) >>= firstRow
@@ -939,6 +987,7 @@ publishPost uId pc = commitedTransactionallyUpdate $ do
             return pId
         _ -> lift $ S.throwError S.err404
 
+-- |Создает канал.
 createNewChannel :: UserId -> NamedChannelCreationRequest -> StaticPQ (Maybe NamedChannelId)
 createNewChannel uId req = commitedTransactionallyUpdate $ do
     let uIds = toList $ namedChannelCreationRequestPeopleIds req
@@ -946,9 +995,11 @@ createNewChannel uId req = commitedTransactionallyUpdate $ do
     cId <- manipulateParams createNamedChannelQ (addUserToChannelCreate uId (req {namedChannelCreationRequestPeopleIds = fromList uIds})) >>= firstRow
     return $ fmap fromOnly cId
 
+-- |Возвращает канал для данного пользователя.
 channelCountForUser :: UserId -> StaticPQ Int64
 channelCountForUser uId = (fromMaybe 0 . fmap fromOnly) <$> (runQueryParams countChannelsQ (Only uId) >>= firstRow)
 
+-- |Обновляет канал.
 updateChannel :: UserId -> NamedChannel UserId -> StaticPQ ()
 updateChannel uId req = do
     let uIds = namedChannelPeopleIds req
@@ -957,17 +1008,21 @@ updateChannel uId req = do
     _ <- commitedTransactionallyUpdate $ manipulateParams updateNamedChannelQ $ addUserToChannelUpdate uId (req {namedChannelPeopleIds = uIds})
     return ()
 
+-- |Возвращает факультет.
 getFaculty :: Text -> StaticPQ Faculty
 getFaculty t = runQueryParams getFacultyQ (Only t) >>= firstRow >>= fromMaybe404
 
+-- |Проверяет, является ли данный факультет валидным.
 isValidFaculty :: FacultyUrl -> StaticPQ Bool
 isValidFaculty url = do
     (faculty :: Maybe Faculty) <- runQueryParams getFacultyQ (Only url) >>= firstRow
     return $ isJust faculty
 
+-- |Обновляет факультет.
 updateFaculty :: Faculty -> StaticPQ ()
 updateFaculty fac = void $ manipulateParams updateFacultyQ fac
 
+-- |Возвращает посты в канале.
 getChannelPosts
     :: UserId
     -> Maybe PostId
@@ -986,6 +1041,7 @@ getChannelPosts uId pId lim dir cId = do
         >>= getRows
     fmap (fromMaybe $ ResponseWithUsers mempty mempty) $ rowsToPosts postRows `liftMaybe` wrapIntoResponse
 
+-- |Возвращает почты в анонимном кнаале.
 getAnonymousChannelPosts
     :: Maybe PostId
     -> Limit
@@ -996,19 +1052,23 @@ getAnonymousChannelPosts pId lim dir (AnonymousChannel tags people) = do
     postRows <- runQueryParams (getChannelPostsQ lim dir people tags) (Only pId) >>= getRows
     fmap (fromMaybe $ ResponseWithUsers mempty mempty) $ rowsToPosts postRows `liftMaybe` wrapIntoResponse
 
+-- |Возвращает все каналы.
 getAllChannels :: UserId -> StaticPQ [NamedChannel UserId]
 getAllChannels uId = fmap (map removeUserFromChannel) $
     runQueryParams getAllChannelsForUserQ (Only uId) >>= getRows
 
+-- |Удаляет именованный канал.
 deleteNamedChannel :: UserId -> NamedChannelId -> StaticPQ ()
 deleteNamedChannel uId cId = do
     _ <- getChannelForUser uId cId
     _ <- commitedTransactionallyUpdate $ manipulateParams deleteNamedChannelQ (Only cId)
     return ()
 
+-- |Возвращает теги.
 getTags :: Limit -> StaticPQ [String]
 getTags lim = map fromOnly <$> (runQuery (getNpopularTagsQ lim) >>= getRows)
 
+-- |Возвращает диалоги.
 getDialogs
     :: UserId
     -> Maybe MessageId
@@ -1019,6 +1079,7 @@ getDialogs uId mId lim dir = do
     resp <- runQueryParams (getChatsQ lim dir) (uId, Just $ show uId, mId) >>= getRows
     (>>= fromMaybe500) $ (responseToDialogs uId resp `liftMaybe` wrapIntoResponse)
 
+-- |Возвращает сообщения в диалоге.
 getMessagesInUserChat
     :: UserId
     -> UserId
@@ -1030,6 +1091,7 @@ getMessagesInUserChat selfId uId mId lim dir = do
     resp <- runQueryParams (getMessagesQ lim dir) (selfId, uId, mId) >>= getRows
     fromMaybe500 . sequence . map restoreMessage $ resp
 
+-- |Возвращает сообщения в групповой беседе.
 getMessagesInGroupChat
     :: UserId
     -> GroupChatId
@@ -1042,6 +1104,7 @@ getMessagesInGroupChat selfId gId mId lim dir = do
     resp <- runQueryParams (getGroupMessagesQ lim dir) (gId, mId) >>= getRows
     return . catMaybes . map restoreMessage $ resp
 
+-- |Отправляет сообщение.
 sendMessage :: UserId -> MessageCreation -> StaticPQ MessageId
 sendMessage selfId (MessageCreation (Just gId) uId@Nothing body) = do
     _ <- getGroupChatForUser selfId gId
@@ -1055,6 +1118,7 @@ sendMessage selfId (MessageCreation gId@Nothing (Just uId) body) = do
     return mId
 sendMessage _ _ = lift $ S.throwError S.err400
 
+-- |Создает групповую беседу.
 createGroupChat :: UserId -> GroupChatCreation -> StaticPQ GroupChatId
 createGroupChat uId (GroupChatCreation (Jsonb chatUsers) name) = do
     verifyUsers . M.keys $ chatUsers
@@ -1065,6 +1129,7 @@ createGroupChat uId (GroupChatCreation (Jsonb chatUsers) name) = do
         _ <- manipulateParams createPhantomMessageQ (Only chatId)
         return chatId
 
+-- |Обновляет групповую беседу.
 updateGroupChat :: UserId -> GroupChat -> StaticPQ ()
 updateGroupChat uId (GroupChat gId (Jsonb perms) name) = do
     verifyUsers . M.keys $ perms
@@ -1075,6 +1140,7 @@ updateGroupChat uId (GroupChat gId (Jsonb perms) name) = do
         let newPerms = M.insert uId userPerm perms
         void $ manipulateParams updateGroupChatQ (GroupChat gId (Jsonb newPerms) name)
 
+-- |Удаляет пользователя из беседы.
 leaveGroupChat :: UserId -> GroupChatId -> StaticPQ ()
 leaveGroupChat uId gId = commitedTransactionallyUpdate $ do
     gChat@(GroupChat _ (Jsonb perms) _) <- getGroupChatForUser uId gId
@@ -1083,6 +1149,7 @@ leaveGroupChat uId gId = commitedTransactionallyUpdate $ do
         then deleteGroupChat gId
         else void $ manipulateParams updateGroupChatQ gChat{groupChatUsers = Jsonb newPerms}
 
+-- |Возвращает беседу для пользователя.
 getGroupChatForUser :: UserId -> GroupChatId -> StaticPQ GroupChat
 getGroupChatForUser uId gId = do
     chat <- runQueryParams getGroupChatForUserQ (show uId, gId) >>= firstRow
@@ -1090,15 +1157,18 @@ getGroupChatForUser uId gId = do
         (Just c) -> return c
         Nothing -> lift $ S.throwError S.err404
 
+-- |Проверяет, является ли данная беседа валидной для данного пользователя.
 groupChatIsValidForUser :: UserId -> GroupChatId -> StaticPQ Bool
 groupChatIsValidForUser uId gId = do
     (chat :: Maybe GroupChat) <- runQueryParams getGroupChatForUserQ (show uId, gId) >>= firstRow
     return $ isJust chat
 
+-- |Возвращает каналы по поисковой строке.
 getFacultyFromQuery :: T.Text -> StaticPQ [Faculty]
 getFacultyFromQuery query =
     runQueryParams getFacultySearchResultQ (Only . queryFromTextAbbr $ query) >>= getRows
 
+-- |Ищет пользователей по строке.
 searchUsers :: T.Text -> StaticPQ [User Faculty]
 searchUsers query = do
     unless (validateText query) $ lift $ throwError lengthExceeded
@@ -1106,37 +1176,45 @@ searchUsers query = do
         then return []
         else map rowToUser <$> (runQueryParams searchUsersQ (Only . queryFromText $ query) >>= getRows)
 
+-- |Ищет теги по запосу.
 searchTags :: T.Text -> StaticPQ [Text]
 searchTags "" = return []
 searchTags query = map fromOnly <$>
     (runQueryParams searchTagsQ
         (Only . (<> ":*") . T.strip $ query) >>= getRows)
 
+-- |Создает токен.
 createToken :: Token -> StaticPQ ()
 createToken token = void $ manipulateParams createTokenQ token
 
+-- |Деактивирует все токены для пользователя.
 killAllTokens :: UserId -> StaticPQ ()
 killAllTokens = void . manipulateParams killAllTokensQ . Only
 
+-- |Удаляет устаревшую информацию про авторизацию.
 pruneAuth :: StaticPQ ()
 pruneAuth = do
     _ <- commitedTransactionallyUpdate . manipulate $ pruneDeadTokensQ
     _ <- commitedTransactionallyUpdate . manipulate $ pruneGhostUsersQ
     return ()
 
+-- |Осуществляет поиск по каналам.
 searchChannels :: UserId -> Text -> StaticPQ [NamedChannel UserId]
 searchChannels uId query = fmap (map removeUserFromChannel) $
     runQueryParams searchChannelsForUserQ (uId, queryFromText query) >>= getRows
 
 -- NOTE: Not transactional
+-- |Проверяет, является ли токен валидным.
 validateToken :: Token -> StaticPQ ()
 validateToken token = do
     void $ manipulateParams updateTokenQ token{tokenVerificationCode = Nothing, tokenActivationCode = Nothing}
     void $ manipulateParams validateUserQ $ Only $ tokenUserId token
 
+-- |Даективирует токен.
 invalidateToken :: UserId -> ByteString -> StaticPQ ()
 invalidateToken uId bs = void . manipulateParams deleteTokenQ $ (uId, bs)
 
+-- |Пытается активировать токен с помощью кода.
 tryVerifyToken :: UserId -> ByteString -> Int -> StaticPQ (Maybe Token)
 tryVerifyToken uId tokenData code = commitedTransactionallyUpdate $ do
     token' <- runQueryParams getTokenQ (uId, hash tokenData) >>= firstRow
@@ -1154,6 +1232,7 @@ tryVerifyToken uId tokenData code = commitedTransactionallyUpdate $ do
                             _ <- manipulateParams updateTokenQ newToken
                             return Nothing
 
+-- |Пытается активировать с помощью ключа активации.
 tryActivateToken :: UserId -> ByteString -> StaticPQ (Maybe Token)
 tryActivateToken uId activationData = do
     let hData = hash activationData
@@ -1165,17 +1244,21 @@ tryActivateToken uId activationData = do
                 then commitedTransactionallyUpdate (validateToken token) >> (return $ Just token)
                 else return Nothing
 
+-- |Деактивирует токен.
 deactivateToken :: UserId -> ByteString -> StaticPQ (Maybe Text)
 deactivateToken uId dData = fmap fromOnly <$> (manipulateParams deactivateTokenQ (uId, hash dData) >>= firstRow)
 
+-- |Возвращает активированный токен.
 getVerifiedToken :: UserId -> ByteString -> StaticPQ (Maybe Token)
 getVerifiedToken uId tokenData = runQueryParams getVerifiedTokenQ (uId, hash tokenData) >>= firstRow
 
+-- |Обновляет пользователя.
 updateUser :: (UserUpdateRow) -> StaticPQ (Maybe UserId)
 updateUser user = fmap fromOnly <$> (manipulateParams updateUserQ (normalizeUser user) >>= firstRow)
 
 -- MARK: Utils
 
+-- |Нормализует поля пользователя.
 normalizeUser :: UserUpdateRow -> UserUpdateRow
 normalizeUser UserUpdateRow{..} = UserUpdateRow {
     userUpdateRowId = userUpdateRowId,
@@ -1185,23 +1268,39 @@ normalizeUser UserUpdateRow{..} = UserUpdateRow {
     userUpdateRowUserFaculty = T.toLower . T.strip $ userUpdateRowUserFaculty
 }
 
+-- |Объект пользователя для ответов с базы данных.
 data UserRow = UserRow {
+    -- |Идентификатор пользователя.
     userRowId :: UserId,
+    -- |Имя.
     userRowFirstName :: Text,
+    -- |Отчество.
     userRowMiddleName :: Text,
+    -- |Фамилия.
     userRowLastName :: Text,
+    -- |Факультет.
     userRowFacultyUrl :: FacultyUrl,
+    -- |Почта.
     userRowEmail :: Text,
+    -- |Был ли профиль подтвержден через почту.
     userRowIsValidated :: Bool,
+    -- |Название факультета.
     userRowFacultyName :: T.Text,
+    -- |Адрес сайта факультета.
     userRowFacultyURL :: FacultyUrl,
+    -- |Вспомогательная информация о факультете.
     userRowFacultyPath :: T.Text,
+    -- |Кампус.
     userRowFacultyCampusName :: T.Text,
+    -- |Код Кампуса.
     userRowFacultyCampusCode :: T.Text,
+    -- |Теги департамента.
     userRowFacultyTags :: V.Vector T.Text,
+    -- |АДрес департамента.
     userRowFacultyAddress :: T.Text
 } deriving (GHC.Generic, SOP.Generic, SOP.HasDatatypeInfo)
 
+-- |Функция, переводящая ответ с базы данных в пользователя.
 rowToUser :: UserRow -> User Faculty
 rowToUser UserRow{..} = User {
         userId = userRowId,
@@ -1220,6 +1319,7 @@ rowToUser UserRow{..} = User {
         userEmail = userRowEmail
     }
 
+-- |Переводит строку в запрос с учетом аббревиатур.
 queryFromTextAbbr :: Text -> Text
 queryFromTextAbbr = T.unwords . L.intersperse "&" . map processTerm . filter (not . T.null) . T.split (not . isAlphaNum)
     where
@@ -1230,12 +1330,14 @@ queryFromTextAbbr = T.unwords . L.intersperse "&" . map processTerm . filter (no
                 else mempty
             ) <> ")"
 
+-- |Переводит строку в запорс.
 queryFromText :: Text -> Text
 queryFromText = T.unwords . L.intersperse "&" . map processTerm . filter (not . T.null) . T.split (not . isPrint)
     where
         processTerm :: Text -> Text
         processTerm t = t <> ":*"
 
+-- |Перевод направление в оператор.
 directionToOperator
     :: P.PaginationDirection
     -> (ConditionOp schema0 from0 grouping0 params0 nullity0 nullity1 (ty :: PGType),
@@ -1248,6 +1350,7 @@ foldMaybe [] = Just []
 foldMaybe (Nothing : _) = Nothing
 foldMaybe (Just x : xs) = (x :) <$> foldMaybe xs
 
+-- |переводит элементы поста с базы данных в объект поста.
 rowsToPosts :: [PostRowResponse] -> Maybe [Post]
 rowsToPosts = foldMaybe . map rowsToPost . L.groupBy ((==) `on` postRowId)
 
@@ -1261,11 +1364,15 @@ idsToColumn :: [Int64] -> Maybe (Query schema params '["id" ::: 'NotNull 'PGint8
 idsToColumn [] = Nothing
 idsToColumn (i:ii) = Just $ values (unsafeIntToExpr i `as` #id) $ map ((`as` #id) . unsafeIntToExpr) ii
 
+-- |Небезопасное переведение числа в SQL выражение.
 unsafeIntToExpr :: Int64 -> Expression schema from grouping params ty
 unsafeIntToExpr = UnsafeExpression . pack . show
 
+-- |Ответ сервера с пользователями.
 data ResponseWithUsers r = ResponseWithUsers {
+    -- |Тело ответа.
     response :: r,
+    -- |Пользователи.
     users :: M.Map UserId (User Faculty)
 } deriving (Generic)
 
@@ -1296,6 +1403,7 @@ instance (Foldable t, HasUsers r) => HasUsers (t r) where
 instance HasUsers Post where
     userSet = Set.singleton . postAuthorId
 
+-- |Оборачивает ответ в пользователей.
 wrapIntoUsers :: r -> Set.Set UserId -> StaticPQ (Maybe (ResponseWithUsers r))
 wrapIntoUsers r us
     | Set.null us = return . Just $ ResponseWithUsers r M.empty

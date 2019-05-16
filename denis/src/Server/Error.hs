@@ -1,13 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Server.Error (
-    invalidToken,
-    amountExceeded,
-    lengthExceeded,
-    formatError,
-    impossibleContent,
-    throwError
-) where
+module Server.Error where
 
 import Servant.Server
 import Control.Monad.Except

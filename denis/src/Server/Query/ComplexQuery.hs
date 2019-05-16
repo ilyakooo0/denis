@@ -15,9 +15,7 @@
 {-# OPTIONS_GHC -Wno-partial-type-signatures #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
-module Server.Query.ComplexQuery (
-    ComplexQuery
-) where
+module Server.Query.ComplexQuery where
 
 import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Builder (toLazyByteString)
@@ -51,7 +49,7 @@ instance {-# Overlapping #-} ToSample [ComplexQueryRequest] where
     toSamples _ = singleSample $ [ComplexQueryRequest "channels/" "", ComplexQueryRequest "posts/last" "3"]
 
 instance {-# Overlapping #-} ToSample [ComplexQueryRepsonse] where
-    toSamples _ = singleSample $ map ComplexQueryRepsonse ["[{\"people\":[1],\"name\":\"newChannelName\",\"id\":7,\"tags\":[]},{\"people\":[1],\"name\":\"newChannelName\",\"id\":6,\"tags\":[]},{\"people\":[1],\"name\":\"newChannelName\",\"id\":5,\"tags\":[]},{\"people\":[1,1,2,2,2],\"name\":\"sssss\",\"id\":4,\"tags\":[\"thisIsHashTag\",\"thisIsHashTag\",\"thisIsHashTag\",\"thisIsHashTag\",\"thisIsAlsoHashTag\",\"cs\"]},{\"people\":[1,7,2,19],\"name\":\"соытвототтоциология\",\"id\":1,\"tags\":[\"sos\"]}]","{\"users\":{\"1\":{\"middleName\":\"FirstUser\",\"lastName\":\"FirstUser\",\"firstName\":\"FirstUser\",\"id\":1}},\"response\":[{\"body\":[{\"markdown\":\"hello\"}],\"authorId\":1,\"id\":28,\"updated\":\"2019-04-13T16:14:38.495832Z\",\"tags\":[]},{\"body\":[{\"markdown\":\"Hello, blyat\"}],\"authorId\":1,\"id\":27,\"updated\":\"2005-01-03T12:34:56Z\",\"tags\":[]}]}"]
+    toSamples _ = singleSample $ map ComplexQueryRepsonse ["[{\"people\":[1],\"name\":\"newChannelName\",\"id\":7,\"tags\":[]},{\"people\":[1],\"name\":\"newChannelName\",\"id\":6,\"tags\":[]},{\"people\":[1],\"name\":\"newChannelName\",\"id\":5,\"tags\":[]},{\"people\":[1,1,2,2,2],\"name\":\"sssss\",\"id\":4,\"tags\":[\"thisIsHashTag\",\"thisIsHashTag\",\"thisIsHashTag\",\"thisIsHashTag\",\"thisIsAlsoHashTag\",\"cs\"]},{\"people\":[1,7,2,19],\"name\":\"соытвототтоциология\",\"id\":1,\"tags\":[\"sos\"]}]","{\"users\":{\"1\":{\"middleName\":\"FirstUser\",\"lastName\":\"FirstUser\",\"firstName\":\"FirstUser\",\"id\":1}},\"response\":[{\"body\":[{\"markdown\":\"hello\"}],\"authorId\":1,\"id\":28,\"updated\":\"2019-04-13T16:14:38.495832Z\",\"tags\":[]},{\"body\":[{\"markdown\":\"Hello\"}],\"authorId\":1,\"id\":27,\"updated\":\"2005-01-03T12:34:56Z\",\"tags\":[]}]}"]
 
 -- MARK: Implementation
 

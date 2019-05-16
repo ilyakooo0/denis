@@ -1,0 +1,20 @@
+CREATE OR REPLACE FUNCTION my_array_to_text(text[])
+  RETURNS text LANGUAGE sql IMMUTABLE AS $$SELECT array_to_string($1, ' ')$$;
+CREATE INDEX "faculty_text" ON "faculties" USING GIN (to_tsvector('russian', "facultyName" || ' ' || "facultyPath" || ' ' || "facultyCampusName" || ' ' || my_array_to_text("facultyTags")));
+CREATE INDEX "faculty_name_path" ON "faculties" USING GIN (to_tsvector('russian', "facultyName" || ' ' || "facultyPath"));
+CREATE INDEX "faculty_name" ON "faculties" USING GIN (to_tsvector('russian', "facultyName"));
+CREATE INDEX group_chat_users ON "groupChats" USING gin ("groupChatUsers");
+CREATE INDEX message_author ON messages USING btree ("messageStorageAuthorId");
+CREATE INDEX message_group ON messages USING btree ("messageStorageDestinationGroupId");
+CREATE INDEX message_user ON messages USING btree ("messageStorageDestinationUserId");
+CREATE INDEX named_channel_owner ON channels USING btree ("namedChannelFullOwner");
+CREATE INDEX post_author ON posts USING btree ("postRowAuthorId");
+CREATE INDEX post_element_ord ON "postElements" USING btree ("rowElementId", "rowElementOrd");
+CREATE INDEX post_tags ON posts USING gin ("postRowTags");
+CREATE INDEX message_time on messages ("messageStorageTime");
+CREATE INDEX post_time on posts ("postRowUpdateTime");
+CREATE INDEX token_user on tokens ("tokenUserId");
+CREATE INDEX token_time on tokens ("tokenExpiryDate");
+CREATE INDEX token_value on tokens using hash ("tokenValue");
+CREATE INDEX token_activation on tokens using hash ("tokenActivationCode");
+CREATE INDEX token_deactivation on tokens using hash ("tokenDeactivationCode");

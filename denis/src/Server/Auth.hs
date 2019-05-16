@@ -12,17 +12,7 @@
     RecordWildCards #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
-module Server.Auth (
-    checkToken,
-    cookieTokenKey,
-    genAuthServerContext,
-    AuthenticationHandler,
-    logIn,
-    contextProxy,
-    AuthenticationCredits(..),
-    authenticationAPI,
-    TokenActivationData
-) where
+module Server.Auth where
 
 import Server.App
 import Data.User
@@ -58,11 +48,15 @@ import qualified Data.Text.Lazy as TL
 import Server.Auth.HTML
 import Data.Char
 import Data.Text.Validator
+import Servant.HTML.Blaze
+import Text.Blaze
+import Crypto.Hash.SHA512
+
 
 -- MARK: Documentation
 
 instance ToSample AuthenticationCredits where
-    toSamples _ = samples $ map AuthenticationCredits ["vchernyshev@hse.ru", "iikostyuchenko@hse.ru"]
+    toSamples _ = samples $ map AuthenticationCredits ["example@hse.ru", "iikostyuchenko@hse.ru"]
 
 instance ToSample UserLoginResponse where
     toSamples _ = samples $ map UserLoginResponse [UserIsRegistered, UserCanRegister, InvalidUser]
@@ -71,7 +65,7 @@ instance ToSample Int where
     toSamples _ = samples [382934, 103845, 294905]
 
 instance ToSample UserCreation where
-    toSamples _ = samples $ [UserCreation "Seva" "Algebrovich" "Leonidov" "cs.hse.ru/dse/"  "vchernyshev@hse.ru"]
+    toSamples _ = samples $ [UserCreation "Василий" "Иванов" "Романович" "cs.hse.ru/dse/"  "example@hse.ru"]
 
 instance ToSample TokenActivationData where
     toSamples _ = singleSample $ TokenActivationData 69 "ABCDE"
@@ -96,19 +90,19 @@ instance ToParam (QueryParam' mods "id" UserId) where
 instance ToSample Markup where
     toSamples _ = noSamples
 
-type LoginDescription = Description "Try to log in with the given email\n\nResponse fields:\n\n- `registered` -- User is registered and the cookie has been set. You now need to get a verification code from the user and pass it to `/verify`.\n- `canRegister` -- the email is valid, but the user needs to register. Prompt him for information and pass it to `/register`.\n- `invalid` -- the email is invalid."
+type LoginDescription = Description "Попытка зайти с указанной почты.\n\nЗначения возвращаемого поля:\n\n- `registered` -- Пользователь уже зарегестрирован и токен был поставлен в HTTP Cookie. Теперь можно запросить у пользователя код активации и передать его в `/verify`.\n- `canRegister` -- почта валидная, но пользователь не зарегестрирован. У пользователя необходимо запросить данные для передачи в `/register`.\n- `invalid` -- почта не валидная."
 
-type LogoutDescription = Description "Log out with the given cookie"
+type LogoutDescription = Description "Деактивировать текущий токен."
 
-type VerifyDescription = Description "Verify token with the verification code from the user.\n\nReturns 400 if the token was not supplied.\n\nReturns 498 if the token was parsed but is invalid.\n\nReturns 403 if the token/code compination is invalid."
+type VerifyDescription = Description "Активировать текущий токен через код, отправленный на почту.\n\nВозвращает 400 если не был передан валидный токен.\n\nВозвращает 498 если токен был обраотан успешно, но не является валидным.\n\nВозвращает 403 если комбинация токена и код не валидная."
 
-type RegisterDescription = Description "Register the user for a new account.\n\nReturns 409 if a user can not be created. (Most likely the email is already registered).\n\nSets the token if creation was successful.\n\nYou should prompt user for code and verify the token with `/verify`."
+type RegisterDescription = Description "Зарегестрировать пользователя.\n\nВозвращает 409 если пользователь не может быть создан. (Скорее всего он уже зарегестрирован).\n\nСтавит токен в HTTP Cookie, если пользователь был успещно создан.\n\nПосле успех необходимо запросить у пользователя код активации, который он получил на почту и передать его в `/verify`."
 
-type CheckCookieDescription = Description "Checks if a parseable cookie is present in the request.\n\nDoes not check if the cookie itself contains valid credentials.\n\nReturns 204 NoContent if cookie is present.\n\nReturns 401 Unauthorized if the cookie is not present."
+type CheckCookieDescription = Description "Проверяет, есть ли в запросе валидный токен.\n\nВалидность содержимого не проверяется.\n\nВозвращает 204 NoContent если токен присутствует.\n\nВозвращает 401 Unauthorized если токена нет."
 
-type ActivateDescription = Description "Activates a token using data from email"
+type ActivateDescription = Description "Активирует токен по ключу из письма."
 
-type DeactivateDescription = Description "Deactivates a token using data from email"
+type DeactivateDescription = Description "Деактивирует токен по ключу из письма."
 
 -- MARK: Implementation
 

@@ -6,12 +6,7 @@
     FlexibleInstances #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
-module Server.Logger (
-    Logger,
-    LoggerAPI,
-    mkLogger,
-    Log
-) where
+module Server.Logger where
 
 import Network.Wai
 import Control.Concurrent.STM
@@ -26,6 +21,7 @@ import Network.Wai.Middleware.RequestLogger
 import Data.Default.Class
 import qualified System.Log.FastLogger as FL
 import Servant.Docs
+import Control.Monad.IO.Class
 
 instance HasDocs "log" where
     docsFor _ _ _ = emptyAPI

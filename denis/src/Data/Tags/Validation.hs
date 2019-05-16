@@ -1,11 +1,9 @@
-module Data.Tags.Validation (
-    validateTag,
-    validateTag'
-    ) where
+module Data.Tags.Validation where
 
 import Data.Text as T
 import Data.Char
 
+-- |Функция, валилирующая хэштег, возвращающая тег в монаде `Maybe`
 validateTag :: T.Text -> Maybe T.Text
 validateTag tag =
     let
@@ -14,9 +12,11 @@ validateTag tag =
         then Just normalised
         else Nothing
 
+-- |Функция, проверяющая, является ли данный тег валидным.
 validateTag' :: T.Text -> Bool
 validateTag' = T.all validChar
 
+-- |Функция, проверяющая, является ли данный символ валидным внутри тега.
 validChar :: Char -> Bool
 validChar '-' = True
 validChar c = isAlphaNum c

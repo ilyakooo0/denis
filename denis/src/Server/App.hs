@@ -8,16 +8,7 @@
     TypeSynonymInstances,
     FlexibleInstances #-}
 
-module Server.App (
-    App,
-    DBConnection,
-    Config(..),
-    ask,
-    asks,
-    liftIO,
-    MailConfig(..),
-    fromMaybeThrow
-) where
+module Server.App where
 
 import Servant.Server
 import Control.Monad.Reader
@@ -27,6 +18,7 @@ import Generics.SOP (K)
 import Squeal.PostgreSQL.PQ (Connection)
 import Crypto.RNG
 import Server.Error
+import Control.Monad.Except
 
 type App = ReaderT Config Handler
 

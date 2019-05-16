@@ -1,9 +1,4 @@
-module Server.Periodic (
-    periodically,
-    seconds,
-    minutes,
-    hours
-    ) where
+module Server.Periodic where
 
 import Control.Monad.IO.Class
 import Control.Concurrent

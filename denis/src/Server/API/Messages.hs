@@ -7,10 +7,7 @@
     TypeOperators,
     RecordWildCards #-}
 
-module Server.API.Messages (
-    MessagesApi,
-    messagesServer
-) where
+module Server.API.Messages where
 
 import Servant.API
 import Server.App
@@ -28,15 +25,16 @@ import Server.Error
 import qualified Data.Map as M
 import Squeal.PostgreSQL.Schema
 import Data.Limits
+import Control.Monad.Except
 
-type GetAllChatsDescription = Description "Gets chats starting from/ending with the given message id."
-type GetGroupChatDescription = Description "Gets information about a given group chat."
-type GetUpdateGroupChatDescription = Description "Updates given group chat.\n\nReturns 404 if you are not part of the group chat.\n\nReturn 401 if you do not have sufficient permissions to edit the chat."
-type CreateGroupChatDescription = Description "Creates a group chat with the given user permission.\n\nThe calling user gets add and promoted to maximum permissions automatically. You do not have to include him.\n\nReturns the id of the created group chat"
-type LeaveGroupChatDescription = Description "Removes the user from the given group chat."
-type MessagesGetGroupChatDesctiption = Description "Gets the messages from the supplied group chat starting from/ending with the given message id."
-type MessagesGetUserChatDesctiption = Description "Gets the messages from the supplied user chat (two people) starting from/ending with the given message id."
-type MessagesSend = Description "Sends the given message.\n\nReturns the id of the sent message."
+type GetAllChatsDescription = Description "Возвращает чаты с данного идентификатора сообщения."
+type GetGroupChatDescription = Description "Возвращает информацию о групповой беседе."
+type GetUpdateGroupChatDescription = Description "Обновляет групповой чат.\n\nВозвращает 404 если пользователь не является участником беседы.\n\nВозвращает 401 Если у пользователя не достаточно прав на редактирование беседы."
+type CreateGroupChatDescription = Description "Создает групповую беседу с данными правами.\n\nВызывающий пользовтаель автоматически приобретает максимальные права. Его не надо добавлять.\n\nВозвращает идентификатор созданного чата."
+type LeaveGroupChatDescription = Description "Убирает пользователя из беседы."
+type MessagesGetGroupChatDesctiption = Description "Возвращает сообщения в групповой бесед начиная с данного идентификатора сообщения."
+type MessagesGetUserChatDesctiption = Description "Возвращает сообщения в диалоге начиная с данного идентификатора сообщения."
+type MessagesSend = Description "Отправляет сообщения.\n\nВозвращает идентификато отправленного сообщения."
 
 type MessagesApi =
     "chats" :> (
