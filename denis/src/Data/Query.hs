@@ -1048,9 +1048,9 @@ sendMessage selfId (MessageCreation (Just gId) uId@Nothing (Jsonb body)) = do
     (Only mId) <- manipulateParams createMessageQ (selfId, Just gId, uId, Jsonb $ stripPostElement body)
         >>= firstRow >>= fromMaybe500
     return mId
-sendMessage selfId (MessageCreation gId@Nothing (Just uId) body) = do
+sendMessage selfId (MessageCreation gId@Nothing (Just uId) (Jsonb body)) = do
     verifyUsers [uId]
-    (Only mId) <- manipulateParams createMessageQ (selfId, gId, Just uId, body)
+    (Only mId) <- manipulateParams createMessageQ (selfId, gId, Just uId, Jsonb $ stripPostElement body)
         >>= firstRow >>= fromMaybe500
     return mId
 sendMessage _ _ = lift $ S.throwError S.err400
